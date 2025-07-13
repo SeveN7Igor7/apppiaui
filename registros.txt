@@ -1,0 +1,4 @@
+PARA ADICIONAR O SOCIAL OU O INGRESSOS DE NOVO NO BottomTabs pode colocar no codigo 
+
+ <Tab.Screen name="Social" component={Social} />
+<Tab.Screen name="Ingressos" component={Ingressos} />

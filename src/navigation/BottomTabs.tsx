@@ -38,8 +38,6 @@ export default function BottomTabs() {
       })}
     >
       <Tab.Screen name="Home" component={Home} />
-      <Tab.Screen name="Social" component={Social} />
-      <Tab.Screen name="Ingressos" component={Ingressos} />
       <Tab.Screen name="Perfil" component={Perfil} />
     </Tab.Navigator>
   );
