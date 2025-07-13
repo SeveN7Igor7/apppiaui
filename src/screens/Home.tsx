@@ -237,6 +237,11 @@ export default function Home() {
     } as never);
   }
 
+  const handleOpenSalesPage = (evento: Evento) => {
+    const url = `https://piauitickets.com/comprar/${evento.id}/${evento.nomeurl || ''}`;
+    Linking.openURL(url).catch(err => console.error('Erro ao abrir URL:', err));
+  };
+
   const getMensagemVibe = (eventoId: string): string => {
     const vibe = vibes[eventoId];
     if (!vibe || vibe.count === 0) return 'Seja o primeiro a avaliar!';
@@ -347,7 +352,11 @@ export default function Home() {
             {eventosParaLista.map((evento) => {
               const encerrado = !evento.vendaaberta?.vendaaberta;
               return (
-                <View key={evento.id} style={styles.eventCard}>
+                <TouchableOpacity
+                  key={evento.id}
+                  style={styles.eventCard}
+                  onPress={() => handleOpenSalesPage(evento)}
+                >
                   <Image
                     source={{ uri: evento.imageurl }}
                     style={[styles.eventImage, encerrado && { opacity: 0.4 }]}
@@ -379,7 +388,7 @@ export default function Home() {
                       </>
                     )}
                   </View>
-                </View>
+                </TouchableOpacity>
               );
             })}
           </View>
@@ -626,3 +635,5 @@ const styles = StyleSheet.create({
     color: '#888',
   },
 });
+
+
