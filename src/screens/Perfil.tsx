@@ -144,19 +144,30 @@ export default function Perfil({ navigation }) {
   }, [user]);
 
   const fetchProfileImage = async (cpf: string) => {
-    try {
-      const imageRef = ref(databaseSocial, `users/cpf/${cpf}/config/perfilimage`);
-      const snapshot = await get(imageRef);
-      if (snapshot.exists()) {
-        setProfileImageUrl(snapshot.val().imageperfilurl);
-      } else {
-        setProfileImageUrl(null);
-      }
-    } catch (error) {
-      console.error("Erro ao buscar imagem de perfil:", error);
+  console.log("🔎 Buscando imagem de perfil...");
+  console.log("📌 CPF do usuário:", cpf);
+  console.log("🧭 Database utilizado: databaseSocial");
+  const imageRefPath = `users/cpf/${cpf}/config/perfilimage`;
+  console.log("📂 Caminho no banco:", imageRefPath);
+
+  try {
+    const imageRef = ref(databaseSocial, imageRefPath);
+    const snapshot = await get(imageRef);
+
+    if (snapshot.exists()) {
+      const data = snapshot.val();
+      console.log("✅ Imagem encontrada:", data);
+      setProfileImageUrl(data.imageperfilurl);
+    } else {
+      console.warn("⚠️ Nenhum dado de imagem encontrado nesse caminho.");
       setProfileImageUrl(null);
     }
-  };
+  } catch (error) {
+    console.error("❌ Erro ao buscar imagem de perfil:", error);
+    setProfileImageUrl(null);
+  }
+};
+
 
   const fazerLogin = async () => {
     if (!cpfInput || !password) {
@@ -278,13 +289,13 @@ export default function Perfil({ navigation }) {
             </View>
 
             <View style={styles.optionsSection}>
-              <ProfileOption icon="image-outline" text="Editar Foto de Perfil" onPress={handleEditProfileImage} />
-              <ProfileOption icon="create-outline" text="Editar Perfil" onPress={handleEditProfile} />
-              <ProfileOption icon="settings-outline" text="Configurações" onPress={handleSettings} />
-              <ProfileOption icon="help-circle-outline" text="Ajuda e Suporte" onPress={handleHelp} />
-              <ProfileOption icon="lock-closed-outline" text="Política de Privacidade" onPress={handlePrivacyPolicy} />
-              <ProfileOption icon="document-text-outline" text="Termos de Serviço" onPress={handleTermsOfService} />
-            </View>
+              <ProfileOption icon="ticket-outline" text="Ver Meus Ingressos" onPress={() => navigation.navigate("Ingressos")} />
+  <ProfileOption icon="image-outline" text="Editar Foto de Perfil" onPress={handleEditProfileImage} />
+  <ProfileOption icon="create-outline" text="Editar Perfil" onPress={handleEditProfile} />
+  <ProfileOption icon="settings-outline" text="Configurações" onPress={handleSettings} />
+  <ProfileOption icon="document-text-outline" text="Termos de Serviço" onPress={handleTermsOfService} />
+</View>
+
 
             <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
               <Text style={styles.logoutButtonText}>Sair da Conta</Text>
