@@ -2,6 +2,7 @@
 import { initializeApp } from 'firebase/app';
 import { getDatabase } from 'firebase/database';
 
+// Banco de dados do APP
 const firebaseConfigSocial = {
   apiKey: "AIzaSyDOupLW3rbpxA7H78pW4802nzjUJHIKG5k",
   authDomain: "piauiappdb.firebaseapp.com",

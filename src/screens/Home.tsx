@@ -13,6 +13,7 @@ import {
   Dimensions,
   Linking,
   Alert,
+  StatusBar,
 } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -21,8 +22,48 @@ import { database } from '../services/firebase';
 import { databaseSocial } from '../services/firebaseappdb';
 import { AuthContext } from '../contexts/AuthContext';
 import { useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Colors } from '../constants/Colors';
+import { Typography } from '../constants/Typography';
+import { Spacing } from '../constants/Spacing';
+import { MapStyle } from '../constants/MapStyle';
+import { Animated, Easing } from 'react-native';
 
-const { width } = Dimensions.get('window');
+const PulsatingCircle = ({ size, color }) => {
+  const scale = new Animated.Value(0);
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.timing(scale, {
+        toValue: 1,
+        duration: 1500,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    ).start();
+  }, []);
+
+  const pulseStyle = {
+    transform: [
+      {
+        scale: scale.interpolate({
+          inputRange: [0, 0.5, 1],
+          outputRange: [1, 1.5, 1],
+        }),
+      },
+    ],
+    width: size,
+    height: size,
+    borderRadius: size / 2,
+    backgroundColor: color,
+    position: 'absolute',
+  };
+
+  return <Animated.View style={pulseStyle} />;
+};
+
+const { width, height } = Dimensions.get('window');
 
 type Evento = {
   id: string;
@@ -45,6 +86,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [storyAberto, setStoryAberto] = useState<Evento | null>(null);
   const [vibes, setVibes] = useState<Record<string, VibeData>>({});
+  const [visualizacaoCompleta, setVisualizacaoCompleta] = useState(false);
 
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationLoading, setLocationLoading] = useState(true);
@@ -191,9 +233,9 @@ export default function Home() {
       const diffHoras = Math.floor(diffMs / (1000 * 60 * 60));
       const diffMin = Math.floor(diffMs / (1000 * 60));
 
-      if (diffMin <= 0) return '🔴 Acontecendo agora!';
-      if (diffMin < 60) return `⏳ Faltam ${diffMin} min`;
-      if (diffHoras <= 5) return `⏱️ Faltam ${diffHoras} horas`;
+      if (diffMin <= 0) return 'Acontecendo agora!';
+      if (diffMin < 60) return `Faltam ${diffMin} min`;
+      if (diffHoras <= 5) return `Faltam ${diffHoras} horas`;
       return '';
     } catch {
       return '';
@@ -253,7 +295,7 @@ export default function Home() {
     }
     if (vibe.media < 3) return 'Vibe baixa';
     if (vibe.media < 4.5) return 'Vibe moderada';
-    return '🔥 Altíssima vibe!';
+    return 'Altíssima vibe!';
   };
 
   const mostraSeloAltaVibe = (eventoId: string): boolean => {
@@ -261,179 +303,392 @@ export default function Home() {
     return !!vibe && vibe.count >= 9 && vibe.media >= 4.5;
   };
 
+  // Componente Story Card estilo Instagram
+  const renderStoryCard = (evento: Evento, index: number) => (
+    <TouchableOpacity
+      key={evento.id}
+      style={[styles.storyCard, { marginLeft: index === 0 ? 0 : 12 }]}
+      onPress={() => setStoryAberto(evento)}
+      activeOpacity={0.8}
+    >
+      <View style={styles.storyImageContainer}>
+        <Image source={{ uri: evento.imageurl }} style={styles.storyImage} />
+        
+        {/* Borda gradiente estilo Instagram */}
+        <LinearGradient
+          colors={['#FF006E', '#FB5607', '#FF006E']}
+          style={styles.storyBorder}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
+        
+        {/* Badge de alta vibe */}
+        {mostraSeloAltaVibe(evento.id) && (
+          <View style={styles.storyVibeBadge}>
+            <MaterialCommunityIcons name="fire" size={12} color={Colors.text.onPrimary} />
+          </View>
+        )}
+      </View>
+      
+      <Text style={styles.storyTitle} numberOfLines={2}>
+        {evento.nomeevento}
+      </Text>
+    </TouchableOpacity>
+  );
+
+  const renderEventCard = (evento: Evento) => {
+    const encerrado = !evento.vendaaberta?.vendaaberta;
+    
+    return (
+      <TouchableOpacity
+        key={evento.id}
+        style={styles.eventCard}
+        onPress={() => handleOpenSalesPage(evento)}
+        activeOpacity={0.9}
+      >
+        <View style={styles.eventImageContainer}>
+          <Image
+            source={{ uri: evento.imageurl }}
+            style={[styles.eventImage, encerrado && styles.eventImageDisabled]}
+          />
+          
+          {/* Overlay para eventos encerrados */}
+          {encerrado && (
+            <View style={styles.eventDisabledOverlay}>
+              <MaterialCommunityIcons name="close-circle" size={24} color={Colors.text.onPrimary} />
+              <Text style={styles.eventDisabledText}>Vendas Encerradas</Text>
+            </View>
+          )}
+          
+          {/* Badge de alta vibe para eventos ativos */}
+          {mostraSeloAltaVibe(evento.id) && !encerrado && (
+            <View style={styles.eventHighVibeBadge}>
+              <MaterialCommunityIcons name="fire" size={14} color={Colors.text.onPrimary} />
+              <Text style={styles.eventHighVibeBadgeText}>Alta Vibe</Text>
+            </View>
+          )}
+        </View>
+        
+        <View style={styles.eventCardContent}>
+          <Text style={styles.eventName} numberOfLines={2}>
+            {evento.nomeevento}
+          </Text>
+          
+          {evento.datainicio && (
+            <View style={styles.eventInfoRow}>
+              <MaterialCommunityIcons name="calendar" size={16} color={Colors.text.tertiary} />
+              <Text style={styles.eventInfoText}>{evento.datainicio}</Text>
+            </View>
+          )}
+          
+          {evento.aberturaportas && (
+            <View style={styles.eventInfoRow}>
+              <MaterialCommunityIcons name="clock-outline" size={16} color={Colors.text.tertiary} />
+              <Text style={styles.eventInfoText}>{evento.aberturaportas}</Text>
+            </View>
+          )}
+          
+          {/* Informações de vibe para eventos de hoje */}
+          {eventosHoje.includes(evento) && (
+            <>
+              <Text style={styles.vibeMessage}>{getMensagemVibe(evento.id)}</Text>
+              
+              <TouchableOpacity
+                onPress={() => handleAvaliarVibe(evento)}
+                style={styles.vibeButtonSmall}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={Colors.gradients.primaryMagenta}
+                  style={styles.vibeButtonSmallGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  <MaterialCommunityIcons name="star-outline" size={14} color={Colors.text.onPrimary} />
+                  <Text style={styles.vibeButtonSmallText}>Avaliar Vibe</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </>
+          )}
+          
+          {/* Botão de ação principal */}
+          {!encerrado && (
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => handleOpenSalesPage(evento)}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={Colors.gradients.primaryPurple}
+                style={styles.actionButtonGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <MaterialCommunityIcons name="ticket" size={16} color={Colors.text.onPrimary} />
+                <Text style={styles.actionButtonText}>Ver Detalhes</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   return (
-    <SafeAreaView style={styles.safeContainer}>
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={Colors.neutral.black} />
+      
+      {/* Header com fundo preto */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>🎫 Eventos Piauí Tickets</Text>
+        <View style={styles.headerContent}>
+          <MaterialCommunityIcons name="ticket" size={24} color={Colors.text.onPrimary} />
+          <Image 
+            source={require('../images/logo.png')} 
+            style={styles.headerLogo}
+            resizeMode="contain"
+          />
+          <TouchableOpacity style={styles.profileButton}>
+            <MaterialCommunityIcons name="account-circle" size={24} color={Colors.text.onPrimary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#6200ee" />
-          <Text>Carregando eventos...</Text>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary.purple} />
+          <Text style={styles.loadingText}>Carregando eventos...</Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
+        <ScrollView 
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollViewContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Seção de Stories (Eventos em Destaque) */}
           {eventosHoje.length > 0 && (
-            <View style={styles.storiesContainer}>
-              <Text style={styles.sectionTitle}>🔥 Em Destaque</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {eventosHoje.map((evento) => (
-                  <TouchableOpacity
-                    key={evento.id}
-                    style={styles.storyCard}
-                    onPress={() => setStoryAberto(evento)}
-                  >
-                    <Image source={{ uri: evento.imageurl }} style={styles.storyImage} />
-                    <Text style={styles.storyText}>{evento.nomeevento}</Text>
-                    <Text style={styles.storyUrgencia}>{getUrgenciaMensagem(evento)}</Text>
-
-                    <Text style={{ fontSize: 11, color: '#444' }}>
-                      {getMensagemVibe(evento.id)}
-                    </Text>
-
-                    {mostraSeloAltaVibe(evento.id) && (
-                      <Text style={{ color: '#e53935', fontWeight: 'bold', fontSize: 16 }}>
-                        🔥 Altíssima vibe!
-                      </Text>
-                    )}
-
-                    <TouchableOpacity
-                      onPress={() => handleAvaliarVibe(evento)}
-                      style={styles.botaoAvaliar}
-                    >
-                      <Text style={styles.botaoAvaliarText}>✨ Avaliar vibe</Text>
-                    </TouchableOpacity>
-                  </TouchableOpacity>
-                ))}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <MaterialCommunityIcons name="fire" size={24} color={Colors.primary.magenta} />
+                <Text style={styles.sectionTitle}>Em Destaque</Text>
+              </View>
+              
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.storiesScrollContent}
+              >
+                {eventosHoje.map(renderStoryCard)}
               </ScrollView>
             </View>
           )}
 
-          <View style={styles.locationMessageContainer}>
+          {/* Seção de Localização */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <MaterialCommunityIcons name="map-marker" size={24} color={Colors.primary.purple} />
+              <Text style={styles.sectionTitle}>Localização</Text>
+            </View>
+            
             {locationLoading && (
-              <Text style={styles.locationMessageText}>Carregando localização...</Text>
+              <View style={styles.locationMessage}>
+                <ActivityIndicator size="small" color={Colors.primary.purple} />
+                <Text style={styles.locationMessageText}>Carregando localização...</Text>
+              </View>
             )}
+            
             {!!locationErrorMsg && (
-              <Text style={[styles.locationMessageText, { color: '#b71c1c' }]}>
-                {locationErrorMsg}
-              </Text>
+              <View style={styles.locationMessage}>
+                <MaterialCommunityIcons name="alert-circle" size={20} color={Colors.feedback.error} />
+                <Text style={[styles.locationMessageText, { color: Colors.feedback.error }]}>
+                  {locationErrorMsg}
+                </Text>
+              </View>
             )}
-          </View>
 
-          <View style={styles.mapContainer}>
             {location && (
-              <MapView
-                provider={PROVIDER_GOOGLE}
-                style={styles.map}
-                initialRegion={{
-                  latitude: location.latitude,
-                  longitude: location.longitude,
-                  latitudeDelta: 0.005,
-                  longitudeDelta: 0.005,
-                }}
-                showsUserLocation
-                showsMyLocationButton
-                zoomControlEnabled
-              >
-                <Marker
-                  coordinate={{
+              <View style={styles.mapContainer}>
+                <MapView
+                  provider={PROVIDER_GOOGLE}
+                  style={styles.map}
+                  initialRegion={{
                     latitude: location.latitude,
                     longitude: location.longitude,
+                    latitudeDelta: 0.005,
+                    longitudeDelta: 0.005,
                   }}
-                  title="Você está aqui"
-                />
-              </MapView>
+                  customMapStyle={MapStyle}
+                  showsUserLocation={false}
+                  showsMyLocationButton={false}
+                  zoomControlEnabled={false}
+                  showsCompass={false}
+                  showsScale={false}
+                  showsTraffic={false}
+                  showsIndoors={false}
+                  showsBuildings={false}
+                >
+
+                  {location && (
+                    <View style={styles.pulsatingContainer}>
+                      <PulsatingCircle size={20} color="rgba(66, 133, 244, 0.7)" />
+                      <View style={styles.userLocationDot} />
+                    </View>
+                  )}
+                </MapView>
+              </View>
             )}
           </View>
 
-          <View style={styles.listContainer}>
-            <Text style={styles.sectionTitle}>📅 Próximos Eventos</Text>
-            {eventosParaLista.map((evento) => {
-              const encerrado = !evento.vendaaberta?.vendaaberta;
-              return (
-                <TouchableOpacity
-                  key={evento.id}
-                  style={styles.eventCard}
-                  onPress={() => handleOpenSalesPage(evento)}
-                >
-                  <Image
-                    source={{ uri: evento.imageurl }}
-                    style={[styles.eventImage, encerrado && { opacity: 0.4 }]}
-                  />
-                  <View style={styles.eventContent}>
-                    <Text style={styles.eventName}>{evento.nomeevento}</Text>
-                    {encerrado && (
-                      <Text style={styles.vendaEncerrada}>🚫 Vendas online encerradas</Text>
-                    )}
-
-                    {eventosHoje.includes(evento) && (
-                      <>
-                        <Text style={{ fontSize: 11, color: '#444' }}>
-                          {getMensagemVibe(evento.id)}
-                        </Text>
-
-                        {mostraSeloAltaVibe(evento.id) && (
-                          <Text style={{ color: '#e53935', fontWeight: 'bold', fontSize: 16 }}>
-                            🔥 Altíssima vibe!
-                          </Text>
-                        )}
-
-                        <TouchableOpacity
-                          onPress={() => handleAvaliarVibe(evento)}
-                          style={styles.botaoAvaliarLista}
-                        >
-                          <Text style={styles.botaoAvaliarText}>✨ Avaliar vibe</Text>
-                        </TouchableOpacity>
-                      </>
-                    )}
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
+          {/* Seção de Próximos Eventos */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <MaterialCommunityIcons name="calendar" size={24} color={Colors.primary.purple} />
+              <Text style={styles.sectionTitle}>Próximos Eventos</Text>
+            </View>
+            
+            <View style={styles.eventsGrid}>
+              {eventosParaLista.map(renderEventCard)}
+            </View>
           </View>
 
-          <View style={styles.futureSection}>
-            <Text style={styles.sectionTitle}>✨ Em breve</Text>
-            <Text style={styles.placeholder}>Novidades serão exibidas aqui!</Text>
+          {/* Seção Em Breve */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <MaterialCommunityIcons name="star-outline" size={24} color={Colors.primary.magenta} />
+              <Text style={styles.sectionTitle}>Em Breve</Text>
+            </View>
+            
+            <View style={styles.comingSoonContainer}>
+              <MaterialCommunityIcons name="rocket-launch" size={48} color={Colors.text.tertiary} />
+              <Text style={styles.comingSoonText}>Novidades serão exibidas aqui!</Text>
+              <Text style={styles.comingSoonSubtext}>Fique ligado para não perder nenhum evento incrível.</Text>
+            </View>
           </View>
         </ScrollView>
       )}
 
-      <Modal visible={!!storyAberto} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            {storyAberto && (
-              <>
-                <Image source={{ uri: storyAberto.imageurl }} style={styles.storyFullImage} />
-                <Text style={styles.modalTitle}>{storyAberto.nomeevento}</Text>
+      {/* Modal de Story estilo Instagram */}
+      <Modal visible={!!storyAberto} animationType="fade" transparent>
+        <View style={styles.storyModalOverlay}>
+          {storyAberto && (
+            <>
+              {/* Imagem de fundo */}
+              <Image source={{ uri: storyAberto.imageurl }} style={styles.storyModalBackground} />
+              
+              {/* Overlay escuro - oculto na visualização completa */}
+              {!visualizacaoCompleta && (
+                <View style={styles.storyModalDarkOverlay} />
+              )}
+              
+              {/* Header do story - oculto na visualização completa */}
+              {!visualizacaoCompleta && (
+                <View style={styles.storyModalHeader}>
+                  <View style={styles.storyModalProgress}>
+                    <View style={styles.storyProgressBar} />
+                  </View>
+                  
+                  <View style={styles.storyModalHeaderContent}>
+                    <View style={styles.storyModalEventInfo}>
+                      <Text style={styles.storyModalEventName}>{storyAberto.nomeevento}</Text>
+                      {storyAberto.datainicio && (
+                        <Text style={styles.storyModalEventDate}>{storyAberto.datainicio}</Text>
+                      )}
+                    </View>
+                    
+                    <TouchableOpacity 
+                      onPress={() => {
+                        setStoryAberto(null);
+                        setVisualizacaoCompleta(false);
+                      }} 
+                      style={styles.storyModalCloseButton}
+                      activeOpacity={0.8}
+                    >
+                      <MaterialCommunityIcons name="close" size={24} color={Colors.story.text} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+              
+              {/* Conteúdo central - oculto na visualização completa */}
+              {!visualizacaoCompleta && (
+                <View style={styles.storyModalContent}>
+                  {getUrgenciaMensagem(storyAberto) && (
+                    <View style={styles.storyUrgencyBadge}>
+                      <MaterialCommunityIcons name="clock-fast" size={20} color={Colors.story.text} />
+                      <Text style={styles.storyUrgencyText}>{getUrgenciaMensagem(storyAberto)}</Text>
+                    </View>
+                  )}
+                  
+                  <Text style={styles.storyVibeMessage}>{getMensagemVibe(storyAberto.id)}</Text>
+                  
+                  {/* Botão Ver Conteúdo Inteiro */}
+                  <TouchableOpacity
+                    style={styles.verConteudoButton}
+                    onPress={() => setVisualizacaoCompleta(true)}
+                    activeOpacity={0.8}
+                  >
+                    <MaterialCommunityIcons name="fullscreen" size={16} color={Colors.story.text} />
+                    <Text style={styles.verConteudoButtonText}>Ver conteúdo inteiro</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              
+              {/* Botão de voltar - visível apenas na visualização completa */}
+              {visualizacaoCompleta && (
                 <TouchableOpacity
-                  style={styles.botaoComprar}
-                  onPress={() =>
-                    Linking.openURL(
-                      `https://piauitickets.com/comprar/${storyAberto.id}/${storyAberto.nomeurl || ''}`
-                    )
-                  }
+                  style={styles.voltarButton}
+                  onPress={() => setVisualizacaoCompleta(false)}
+                  activeOpacity={0.8}
                 >
-                  <Text style={styles.botaoComprarText}>🎟️ Garanta seu acesso agora</Text>
+                  <MaterialCommunityIcons name="arrow-left" size={20} color={Colors.story.text} />
                 </TouchableOpacity>
+              )}
+              
+              {/* Botões de ação na parte inferior - ocultos na visualização completa */}
+              {!visualizacaoCompleta && (
+                <View style={styles.storyModalActions}>
+                  <TouchableOpacity
+                    style={styles.storyActionButton}
+                    onPress={() => {
+                      setStoryAberto(null);
+                      setVisualizacaoCompleta(false);
+                      handleAvaliarVibe(storyAberto);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient
+                      colors={Colors.gradients.primaryMagenta}
+                      style={styles.storyActionButtonGradient}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                    >
+                      <MaterialCommunityIcons name="star-outline" size={20} color={Colors.story.text} />
+                      <Text style={styles.storyActionButtonText}>Avaliar Vibe</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
 
-                <TouchableOpacity
-                  onPress={() => {
-                    setStoryAberto(null);
-                    handleAvaliarVibe(storyAberto);
-                  }}
-                  style={styles.botaoAvaliarModal}
-                >
-                  <Text style={styles.botaoAvaliarText}>✨ Avaliar vibe</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity onPress={() => setStoryAberto(null)} style={styles.fecharModal}>
-                  <Text style={styles.fecharModalText}>✖ Fechar</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
+                  <TouchableOpacity
+                    style={styles.storyPrimaryButton}
+                    onPress={() =>
+                      Linking.openURL(
+                        `https://piauitickets.com/comprar/${storyAberto.id}/${storyAberto.nomeurl || ''}`
+                      )
+                    }
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient
+                      colors={Colors.gradients.primaryPurple}
+                      style={styles.storyActionButtonGradient}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                    >
+                      <MaterialCommunityIcons name="ticket" size={20} color={Colors.story.text} />
+                      <Text style={styles.storyActionButtonText}>Garanta seu ingresso</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </>
+          )}
         </View>
       </Modal>
     </SafeAreaView>
@@ -441,199 +696,441 @@ export default function Home() {
 }
 
 const styles = StyleSheet.create({
-  safeContainer: {
+  container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: Colors.neutral.white,
     paddingTop: Platform.OS === 'android' ? 25 : 0,
   },
+  
+  // Header Styles
   header: {
-    backgroundColor: '#6200ee',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    elevation: 4,
+    backgroundColor: Colors.neutral.black,
+    paddingVertical: Spacing.xl,
+    paddingHorizontal: Spacing.container.horizontal,
+    elevation: Spacing.elevation.high,
+    shadowColor: Colors.shadow.dark,
+    shadowOffset: Spacing.shadowOffset.medium,
+    shadowOpacity: 0.3,
+    shadowRadius: Spacing.shadowRadius.medium,
   },
-  headerTitle: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: 'bold',
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  centered: {
+  headerLogo: {
+    height: 32,
+    flex: 1,
+    marginHorizontal: Spacing.md,
+  },
+  profileButton: {
+    padding: Spacing.xs,
+  },
+  
+  // Loading Styles
+  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: Spacing.container.horizontal,
   },
-  storiesContainer: {
-    marginTop: 20,
-    paddingLeft: 16,
+  loadingText: {
+    ...Typography.styles.bodyLarge,
+    color: Colors.text.secondary,
+    marginTop: Spacing.md,
+  },
+  
+  // Scroll View Styles
+  scrollView: {
+    flex: 1,
+  },
+  scrollViewContent: {
+    paddingBottom: Spacing.xxxxl,
+  },
+  
+  // Section Styles
+  section: {
+    marginTop: Spacing.section.marginTop,
+    paddingHorizontal: Spacing.container.horizontal,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12,
-    color: '#333',
+    ...Typography.styles.h2,
+    color: Colors.text.primary,
+    marginLeft: Spacing.sm,
+  },
+  
+  // Stories Styles (Instagram-like)
+  storiesScrollContent: {
+    paddingRight: Spacing.lg,
   },
   storyCard: {
-    marginRight: 16,
-    width: 120,
     alignItems: 'center',
+    width: 80,
+  },
+  storyImageContainer: {
+    position: 'relative',
+    marginBottom: Spacing.sm,
   },
   storyImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 60,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     borderWidth: 3,
-    borderColor: '#6200ee',
-    marginBottom: 6,
+    borderColor: Colors.neutral.white,
   },
-  storyText: {
-    fontSize: 12,
-    textAlign: 'center',
-    fontWeight: 'bold',
+  storyBorder: {
+    position: 'absolute',
+    top: -3,
+    left: -3,
+    right: -3,
+    bottom: -3,
+    borderRadius: 38,
+    zIndex: -1,
   },
-  storyUrgencia: {
-    fontSize: 11,
-    color: '#e53935',
-    textAlign: 'center',
-  },
-  botaoAvaliar: {
-    marginTop: 6,
-    backgroundColor: '#ff4081',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  botaoAvaliarLista: {
-    marginTop: 8,
-    backgroundColor: '#ff4081',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    alignSelf: 'flex-start',
-  },
-  botaoAvaliarModal: {
-    backgroundColor: '#ff4081',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 30,
-    marginBottom: 20,
-  },
-  botaoAvaliarText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 12,
-  },
-  locationMessageContainer: {
-    marginHorizontal: 16,
-    marginTop: 12,
+  storyVibeBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    backgroundColor: Colors.primary.magenta,
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
     alignItems: 'center',
-    minHeight: 20,
+    borderWidth: 2,
+    borderColor: Colors.neutral.white,
   },
-  locationMessageText: {
-    fontSize: 14,
-    color: '#555',
+  storyTitle: {
+    ...Typography.styles.bodySmall,
+    color: Colors.text.primary,
+    textAlign: 'center',
+    lineHeight: 14,
   },
-  mapContainer: {
-    marginHorizontal: 16,
-    marginVertical: 25,
-    height: 220,
-    borderRadius: 20,
-    overflow: 'hidden',
-    elevation: 5,
-    backgroundColor: '#f0f0f0',
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-  },
-  map: {
-    flex: 1,
-    width: '100%',
-  },
-  listContainer: {
-    paddingHorizontal: 16,
-    marginTop: 10,
+  
+  // Event Card Styles
+  eventsGrid: {
+    gap: Spacing.lg,
   },
   eventCard: {
-    marginBottom: 20,
-    backgroundColor: '#f9f9f9',
-    borderRadius: 10,
+    backgroundColor: Colors.neutral.white,
+    borderRadius: Spacing.card.borderRadius,
+    elevation: Spacing.elevation.medium,
+    shadowColor: Colors.shadow.medium,
+    shadowOffset: Spacing.shadowOffset.small,
+    shadowOpacity: 0.15,
+    shadowRadius: Spacing.shadowRadius.small,
     overflow: 'hidden',
-    elevation: 2,
-    paddingBottom: 12,
+  },
+  eventImageContainer: {
+    position: 'relative',
+    height: 180,
   },
   eventImage: {
     width: '100%',
-    height: 180,
+    height: '100%',
   },
-  eventContent: {
-    padding: 10,
+  eventImageDisabled: {
+    opacity: 0.5,
   },
-  eventName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  vendaEncerrada: {
-    marginTop: 4,
-    color: '#b71c1c',
-    fontWeight: 'bold',
-  },
-  futureSection: {
-    marginTop: 40,
-    paddingHorizontal: 16,
-    marginBottom: 40,
-  },
-  placeholder: {
-    fontSize: 14,
-    color: '#777',
-    marginTop: 6,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.75)',
+  eventDisabledOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: Colors.overlay.modal,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  modalContent: {
-    backgroundColor: '#fff',
-    marginHorizontal: 20,
-    borderRadius: 15,
-    overflow: 'hidden',
-    width: width * 0.85,
-    padding: 10,
+  eventDisabledText: {
+    ...Typography.styles.bodyMedium,
+    color: Colors.text.onPrimary,
+    marginTop: Spacing.xs,
+    fontWeight: Typography.fontWeight.semiBold,
+  },
+  eventHighVibeBadge: {
+    position: 'absolute',
+    top: Spacing.md,
+    right: Spacing.md,
+    backgroundColor: Colors.primary.magenta,
+    borderRadius: 10,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  storyFullImage: {
-    width: '100%',
-    height: 220,
-    borderRadius: 15,
+  eventHighVibeBadgeText: {
+    ...Typography.styles.caption,
+    color: Colors.text.onPrimary,
+    marginLeft: Spacing.xs,
+    fontWeight: Typography.fontWeight.semiBold,
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginVertical: 10,
+  eventCardContent: {
+    padding: Spacing.card.padding,
+  },
+  eventName: {
+    ...Typography.styles.h3,
+    color: Colors.text.primary,
+    marginBottom: Spacing.sm,
+  },
+  eventInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.xs,
+  },
+  eventInfoText: {
+    ...Typography.styles.bodyMedium,
+    color: Colors.text.secondary,
+    marginLeft: Spacing.xs,
+  },
+  vibeMessage: {
+    ...Typography.styles.bodySmall,
+    color: Colors.text.tertiary,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  vibeButtonSmall: {
+    borderRadius: 15,
+    overflow: 'hidden',
+    alignSelf: 'flex-start',
+    marginBottom: Spacing.md,
+  },
+  vibeButtonSmallGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  vibeButtonSmallText: {
+    ...Typography.styles.buttonSmall,
+    color: Colors.text.onPrimary,
+    marginLeft: Spacing.xs,
+  },
+  actionButton: {
+    borderRadius: Spacing.button.borderRadius,
+    overflow: 'hidden',
+  },
+  actionButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.button.paddingHorizontal,
+    paddingVertical: Spacing.button.paddingVertical,
+  },
+  actionButtonText: {
+    ...Typography.styles.button,
+    color: Colors.text.onPrimary,
+    marginLeft: Spacing.xs,
+  },
+  
+  // Location Styles
+  locationMessage: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.md,
+  },
+  locationMessageText: {
+    ...Typography.styles.bodyMedium,
+    color: Colors.text.secondary,
+    marginLeft: Spacing.xs,
+  },
+  mapContainer: {
+    height: 200,
+    borderRadius: Spacing.card.borderRadius,
+    overflow: 'hidden',
+    elevation: Spacing.elevation.medium,
+    shadowColor: Colors.shadow.medium,
+    shadowOffset: Spacing.shadowOffset.medium,
+    shadowOpacity: 0.2,
+    shadowRadius: Spacing.shadowRadius.medium,
+  },
+  map: {
+    flex: 1,
+  },
+  
+  // Coming Soon Styles
+  comingSoonContainer: {
+    alignItems: 'center',
+    paddingVertical: Spacing.xxxl,
+  },
+  comingSoonText: {
+    ...Typography.styles.bodyLarge,
+    color: Colors.text.secondary,
+    marginTop: Spacing.lg,
     textAlign: 'center',
   },
-  botaoComprar: {
-    backgroundColor: '#6200ee',
-    borderRadius: 30,
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    marginBottom: 15,
+  comingSoonSubtext: {
+    ...Typography.styles.bodyMedium,
+    color: Colors.text.tertiary,
+    marginTop: Spacing.xs,
+    textAlign: 'center',
   },
-  botaoComprarText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
+  
+  // Story Modal Styles (Instagram-like)
+  storyModalOverlay: {
+    flex: 1,
+    backgroundColor: Colors.story.background,
   },
-  fecharModal: {
+  storyModalBackground: {
     position: 'absolute',
-    top: 10,
-    right: 10,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: width,
+    height: height,
   },
-  fecharModalText: {
-    fontSize: 22,
-    color: '#888',
+  storyModalDarkOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: Colors.story.overlay,
   },
+  storyModalHeader: {
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.md,
+  },
+  storyModalProgress: {
+    height: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 2,
+    marginBottom: Spacing.md,
+  },
+  storyProgressBar: {
+    height: '100%',
+    width: '100%',
+    backgroundColor: Colors.story.text,
+    borderRadius: 2,
+  },
+  storyModalHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  storyModalEventInfo: {
+    flex: 1,
+  },
+  storyModalEventName: {
+    ...Typography.styles.h3,
+    color: Colors.story.text,
+    fontWeight: Typography.fontWeight.bold,
+  },
+  storyModalEventDate: {
+    ...Typography.styles.bodyMedium,
+    color: Colors.story.text,
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  storyModalCloseButton: {
+    padding: Spacing.sm,
+  },
+  storyModalContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.xl,
+  },
+  storyUrgencyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 20,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    marginBottom: Spacing.xl,
+  },
+  storyUrgencyText: {
+    ...Typography.styles.bodyLarge,
+    color: Colors.story.text,
+    marginLeft: Spacing.sm,
+    fontWeight: Typography.fontWeight.semiBold,
+  },
+  storyVibeMessage: {
+    ...Typography.styles.bodyLarge,
+    color: Colors.story.text,
+    textAlign: 'center',
+    opacity: 0.9,
+  },
+  storyModalActions: {
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+    gap: Spacing.md,
+  },
+  storyActionButton: {
+    borderRadius: Spacing.button.borderRadius,
+    overflow: 'hidden',
+  },
+  storyPrimaryButton: {
+    borderRadius: Spacing.button.borderRadius,
+    overflow: 'hidden',
+  },
+  storyActionButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
+  },
+  storyActionButtonText: {
+    ...Typography.styles.button,
+    color: Colors.story.text,
+    marginLeft: Spacing.sm,
+  },
+  
+  // Estilos para visualização completa
+  verConteudoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 20,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    marginTop: Spacing.xl,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  verConteudoButtonText: {
+    ...Typography.styles.bodySmall,
+    color: Colors.story.text,
+    marginLeft: Spacing.xs,
+    opacity: 0.9,
+  },
+  voltarButton: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 60 : 40,
+    left: Spacing.lg,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 20,
+    padding: Spacing.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  pulsatingContainer: {
+    position: 'absolute',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(66, 133, 244, 0.3)',
+  },
+  userLocationDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#4285F4',
+    borderWidth: 1,
+    borderColor: '#fff',
+  },
+
 });
-
-
