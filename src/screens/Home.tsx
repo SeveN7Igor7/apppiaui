@@ -2,7 +2,6 @@ import React, { useEffect, useState, useContext } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   SafeAreaView,
   Platform,
   Image,
@@ -15,8 +14,6 @@ import {
   Alert,
   StatusBar,
 } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
-import * as Location from 'expo-location';
 import { ref, onValue, get } from 'firebase/database';
 import { database } from '../services/firebase';
 import { databaseSocial } from '../services/firebaseappdb';
@@ -27,41 +24,13 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import { Typography } from '../constants/Typography';
 import { Spacing } from '../constants/Spacing';
-import { MapStyle } from '../constants/MapStyle';
 import { Animated, Easing } from 'react-native';
 
-const PulsatingCircle = ({ size, color }) => {
-  const scale = new Animated.Value(0);
+// Importação dos estilos separados
+import { styles } from '../constants/HomeStyle';
 
-  useEffect(() => {
-    Animated.loop(
-      Animated.timing(scale, {
-        toValue: 1,
-        duration: 1500,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start();
-  }, []);
-
-  const pulseStyle = {
-    transform: [
-      {
-        scale: scale.interpolate({
-          inputRange: [0, 0.5, 1],
-          outputRange: [1, 1.5, 1],
-        }),
-      },
-    ],
-    width: size,
-    height: size,
-    borderRadius: size / 2,
-    backgroundColor: color,
-    position: 'absolute',
-  };
-
-  return <Animated.View style={pulseStyle} />;
-};
+// Importação do GameDataService
+import { GameDataService, UserGameData, badgeConfig } from '../services/GameDataService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -87,35 +56,116 @@ export default function Home() {
   const [storyAberto, setStoryAberto] = useState<Evento | null>(null);
   const [vibes, setVibes] = useState<Record<string, VibeData>>({});
   const [visualizacaoCompleta, setVisualizacaoCompleta] = useState(false);
-
-  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [locationLoading, setLocationLoading] = useState(true);
-  const [locationErrorMsg, setLocationErrorMsg] = useState<string | null>(null);
+  
+  // Estados para gamificação
+  const [userGameData, setUserGameData] = useState<UserGameData | null>(null);
+  const [showLevelUp, setShowLevelUp] = useState(false);
+  const [dailyChallenge, setDailyChallenge] = useState({
+    title: 'Avalie 3 vibes hoje',
+    progress: 0,
+    total: 3,
+    reward: '50 XP'
+  });
 
   const { user } = useContext(AuthContext);
   const navigation = useNavigation();
+  
+  // Instância do GameDataService
+  const gameDataService = GameDataService.getInstance();
 
+  // Carregar dados de gamificação quando o usuário estiver logado
   useEffect(() => {
-    (async () => {
-      setLocationLoading(true);
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setLocationErrorMsg('Permissão para localização negada.');
-        setLocationLoading(false);
-        return;
+    if (user?.cpf) {
+      loadUserGameData();
+    }
+  }, [user]);
+
+  const loadUserGameData = async () => {
+    if (!user?.cpf) return;
+    
+    try {
+      console.log(`[Home] Carregando dados de gamificação para CPF: ${user.cpf}`);
+      const data = await gameDataService.loadUserGameData(user.cpf);
+      setUserGameData(data);
+      
+      // Atualizar desafio diário
+      const today = new Date().toISOString().split('T')[0];
+      const todayChallenge = data.dailyChallenges[today];
+      if (todayChallenge) {
+        setDailyChallenge(prev => ({
+          ...prev,
+          progress: todayChallenge.vibesAvaliadasHoje
+        }));
       }
-      try {
-        let loc = await Location.getCurrentPositionAsync({});
-        setLocation({
-          latitude: loc.coords.latitude,
-          longitude: loc.coords.longitude,
-        });
-      } catch {
-        setLocationErrorMsg('Erro ao obter localização.');
+      
+      console.log(`[Home] Dados de gamificação carregados:`, data);
+    } catch (error) {
+      console.error(`[Home] Erro ao carregar dados de gamificação:`, error);
+    }
+  };
+
+  // Função para registrar uma vibe avaliada
+  const registerVibeEvaluated = async (eventId: string, nota: number) => {
+    if (!user?.cpf || !userGameData) return;
+    
+    try {
+      console.log(`[Home] Registrando vibe avaliada: evento=${eventId}, nota=${nota}`);
+      
+      const result = await gameDataService.registerVibeEvaluated(
+        user.cpf,
+        userGameData,
+        eventId,
+        nota
+      );
+      
+      // Atualizar estado local
+      setUserGameData(result.updatedData);
+      
+      // Mostrar modal de level up se necessário
+      if (result.leveledUp) {
+        setShowLevelUp(true);
       }
-      setLocationLoading(false);
-    })();
-  }, []);
+      
+      // Atualizar desafio diário
+      if (result.challengeCompleted) {
+        setDailyChallenge(prev => ({
+          ...prev,
+          progress: prev.progress + 1
+        }));
+      }
+      
+      console.log(`[Home] Vibe registrada com sucesso. Level up: ${result.leveledUp}, Badges: ${result.unlockedBadges.join(', ')}`);
+    } catch (error) {
+      console.error(`[Home] Erro ao registrar vibe:`, error);
+    }
+  };
+
+  // Função para registrar participação em evento
+  const registerEventParticipation = async (eventId: string) => {
+    if (!user?.cpf || !userGameData) return;
+    
+    try {
+      console.log(`[Home] Registrando participação no evento: ${eventId}`);
+      
+      const result = await gameDataService.registerEventParticipation(
+        user.cpf,
+        userGameData,
+        eventId
+      );
+      
+      // Atualizar estado local
+      setUserGameData(result.updatedData);
+      
+      // Mostrar modal de level up se necessário
+      if (result.leveledUp) {
+        setShowLevelUp(true);
+      }
+      
+      console.log(`[Home] Participação registrada. Level up: ${result.leveledUp}, Badges: ${result.unlockedBadges.join(', ')}`);
+    } catch (error) {
+      console.error(`[Home] Erro ao registrar participação:`, error);
+    }
+  };
 
   useEffect(() => {
     const eventosRef = ref(database, 'eventos/');
@@ -149,7 +199,7 @@ export default function Home() {
     return () => unsubscribe();
   }, []);
 
-  // Aqui a função que calcula média considerando só avaliações da última 1 hora
+  // Função que calcula média considerando só avaliações da última 1 hora
   async function calcularMediaVibe(eventId: string): Promise<VibeData | null> {
     try {
       console.log(`[Home] Iniciando cálculo da vibe para evento: ${eventId}`);
@@ -213,10 +263,10 @@ export default function Home() {
 
     carregarVibes();
 
-    // Opcional: atualizar vibes a cada X minutos para refletir "expiração" das avaliações
+    // Atualizar vibes a cada 5 minutos
     const intervalo = setInterval(() => {
       carregarVibes();
-    }, 5 * 60 * 1000); // a cada 5 minutos
+    }, 5 * 60 * 1000);
 
     return () => clearInterval(intervalo);
   }, [eventos]);
@@ -276,12 +326,21 @@ export default function Home() {
       eventId: evento.id,
       nomeEvento: evento.nomeevento,
       cpf: user.cpf,
+      onVibeEvaluated: (eventId: string, nota: number) => {
+        // Callback para quando uma vibe for avaliada
+        registerVibeEvaluated(eventId, nota);
+      }
     } as never);
   }
 
   const handleOpenSalesPage = (evento: Evento) => {
     const url = `https://piauitickets.com/comprar/${evento.id}/${evento.nomeurl || ''}`;
     Linking.openURL(url).catch(err => console.error('Erro ao abrir URL:', err));
+    
+    // Registrar participação no evento (quando o usuário clica para ver detalhes)
+    if (user?.cpf) {
+      registerEventParticipation(evento.id);
+    }
   };
 
   const getMensagemVibe = (eventoId: string): string => {
@@ -301,6 +360,146 @@ export default function Home() {
   const mostraSeloAltaVibe = (eventoId: string): boolean => {
     const vibe = vibes[eventoId];
     return !!vibe && vibe.count >= 9 && vibe.media >= 4.5;
+  };
+
+  // Função para obter badge icon
+  const getBadgeIcon = (badgeId: string): string => {
+    const badgeInfo = gameDataService.getBadgeInfo(badgeId);
+    return badgeInfo.icon;
+  };
+
+  // Função para obter nome amigável do badge
+  const getBadgeName = (badgeId: string): string => {
+    const badgeInfo = gameDataService.getBadgeInfo(badgeId);
+    return badgeInfo.name;
+  };
+
+  // Componente de Gamificação - Card de Status do Usuário
+  const renderUserStatsCard = () => {
+    if (!userGameData) return null;
+    
+    return (
+      <View style={styles.userStatsCard}>
+        <View style={styles.userStatsHeader}>
+          <View style={styles.userInfo}>
+            <MaterialCommunityIcons name="account-circle" size={40} color={Colors.primary.purple} />
+            <View style={styles.userDetails}>
+              <Text style={styles.userName}>{user?.nome || 'Usuário'}</Text>
+              <Text style={styles.userLevel}>Nível {userGameData.level}</Text>
+            </View>
+          </View>
+          <TouchableOpacity style={styles.streakBadge}>
+            <MaterialCommunityIcons name="fire" size={16} color={Colors.text.onPrimary} />
+            <Text style={styles.streakText}>{userGameData.streak} dias</Text>
+          </TouchableOpacity>
+        </View>
+        
+        <View style={styles.xpContainer}>
+          <View style={styles.xpBar}>
+            <View style={[styles.xpProgress, { width: `${(userGameData.xp / userGameData.xpToNext) * 100}%` }]} />
+          </View>
+          <Text style={styles.xpText}>{userGameData.xp} / {userGameData.xpToNext} XP</Text>
+        </View>
+        
+        <View style={styles.statsRow}>
+          <View style={styles.statItem}>
+            <MaterialCommunityIcons name="calendar-check" size={20} color={Colors.primary.purple} />
+            <Text style={styles.statNumber}>{userGameData.eventosParticipados}</Text>
+            <Text style={styles.statLabel}>Eventos</Text>
+          </View>
+          <View style={styles.statItem}>
+            <MaterialCommunityIcons name="star" size={20} color={Colors.primary.magenta} />
+            <Text style={styles.statNumber}>{userGameData.vibesAvaliadas}</Text>
+            <Text style={styles.statLabel}>Vibes</Text>
+          </View>
+          <View style={styles.statItem}>
+            <MaterialCommunityIcons name="medal" size={20} color={Colors.primary.orange} />
+            <Text style={styles.statNumber}>{userGameData.badges.length}</Text>
+            <Text style={styles.statLabel}>Badges</Text>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  // Componente de Desafio Diário
+  const renderDailyChallenge = () => (
+    <View style={styles.challengeCard}>
+      <View style={styles.challengeHeader}>
+        <MaterialCommunityIcons name="trophy" size={24} color={Colors.primary.orange} />
+        <Text style={styles.challengeTitle}>Desafio Diário</Text>
+      </View>
+      <Text style={styles.challengeDescription}>{dailyChallenge.title}</Text>
+      <View style={styles.challengeProgress}>
+        <View style={styles.progressBar}>
+          <View style={[styles.progressFill, { width: `${(dailyChallenge.progress / dailyChallenge.total) * 100}%` }]} />
+        </View>
+        <Text style={styles.progressText}>{dailyChallenge.progress}/{dailyChallenge.total}</Text>
+      </View>
+      <Text style={styles.challengeReward}>Recompensa: {dailyChallenge.reward}</Text>
+    </View>
+  );
+
+  // Componente de Badges
+  const renderBadges = () => {
+    if (!userGameData) return null;
+    
+    return (
+      <View style={styles.badgesSection}>
+        <View style={styles.sectionHeader}>
+          <MaterialCommunityIcons name="medal" size={24} color={Colors.primary.orange} />
+          <Text style={styles.sectionTitle}>Suas Conquistas</Text>
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.badgesScroll}>
+          {userGameData.badges.map((badge, index) => (
+            <View key={index} style={styles.badgeItem}>
+              <View style={styles.badgeIcon}>
+                <MaterialCommunityIcons name={getBadgeIcon(badge)} size={24} color={Colors.text.onPrimary} />
+              </View>
+              <Text style={styles.badgeLabel}>{getBadgeName(badge)}</Text>
+            </View>
+          ))}
+          <TouchableOpacity style={styles.viewAllBadges}>
+            <MaterialCommunityIcons name="plus" size={24} color={Colors.text.tertiary} />
+            <Text style={styles.viewAllText}>Ver todas</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    );
+  };
+
+  // Componente de Eventos Recomendados
+  const renderRecommendedEvents = () => {
+    const eventosRecomendados = eventos.filter(evento => 
+      mostraSeloAltaVibe(evento.id) || eventosHoje.includes(evento)
+    ).slice(0, 3);
+
+    if (eventosRecomendados.length === 0) return null;
+
+    return (
+      <View style={styles.recommendedSection}>
+        <View style={styles.sectionHeader}>
+          <MaterialCommunityIcons name="heart" size={24} color={Colors.primary.magenta} />
+          <Text style={styles.sectionTitle}>Recomendados para Hoje!</Text>
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recommendedScroll}>
+          {eventosRecomendados.map((evento) => (
+            <TouchableOpacity key={evento.id} style={styles.recommendedCard} onPress={() => handleOpenSalesPage(evento)}>
+              <Image source={{ uri: evento.imageurl }} style={styles.recommendedImage} />
+              <View style={styles.recommendedContent}>
+                <Text style={styles.recommendedTitle} numberOfLines={2}>{evento.nomeevento}</Text>
+                {mostraSeloAltaVibe(evento.id) && (
+                  <View style={styles.recommendedBadge}>
+                    <MaterialCommunityIcons name="fire" size={12} color={Colors.text.onPrimary} />
+                    <Text style={styles.recommendedBadgeText}>Alta Vibe</Text>
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+    );
   };
 
   // Componente Story Card estilo Instagram
@@ -464,6 +663,12 @@ export default function Home() {
           contentContainerStyle={styles.scrollViewContent}
           showsVerticalScrollIndicator={false}
         >
+          {/* Card de Status do Usuário (Gamificação) */}
+          {user && renderUserStatsCard()}
+
+          {/* Desafio Diário */}
+          {user && renderDailyChallenge()}
+
           {/* Seção de Stories (Eventos em Destaque) */}
           {eventosHoje.length > 0 && (
             <View style={styles.section}>
@@ -482,61 +687,11 @@ export default function Home() {
             </View>
           )}
 
-          {/* Seção de Localização */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <MaterialCommunityIcons name="map-marker" size={24} color={Colors.primary.purple} />
-              <Text style={styles.sectionTitle}>Localização</Text>
-            </View>
-            
-            {locationLoading && (
-              <View style={styles.locationMessage}>
-                <ActivityIndicator size="small" color={Colors.primary.purple} />
-                <Text style={styles.locationMessageText}>Carregando localização...</Text>
-              </View>
-            )}
-            
-            {!!locationErrorMsg && (
-              <View style={styles.locationMessage}>
-                <MaterialCommunityIcons name="alert-circle" size={20} color={Colors.feedback.error} />
-                <Text style={[styles.locationMessageText, { color: Colors.feedback.error }]}>
-                  {locationErrorMsg}
-                </Text>
-              </View>
-            )}
+          {/* Eventos Recomendados */}
+          {user && renderRecommendedEvents()}
 
-            {location && (
-              <View style={styles.mapContainer}>
-                <MapView
-                  provider={PROVIDER_GOOGLE}
-                  style={styles.map}
-                  initialRegion={{
-                    latitude: location.latitude,
-                    longitude: location.longitude,
-                    latitudeDelta: 0.005,
-                    longitudeDelta: 0.005,
-                  }}
-                  customMapStyle={MapStyle}
-                  showsUserLocation={false}
-                  showsMyLocationButton={false}
-                  zoomControlEnabled={false}
-                  showsCompass={false}
-                  showsScale={false}
-                  showsTraffic={false}
-                  showsIndoors={false}
-                  showsBuildings={false}
-                >
-
-                  {location && (
-                    <View style={styles.pulsatingContainer}>
-                      <PulsatingCircle size={20} color="rgba(66, 133, 244, 0.7)" />
-                      <View style={styles.userLocationDot} />
-                    </View>
-                  )}
-                </MapView>
-              </View>
-            )}
-          </View>
+          {/* Badges do Usuário */}
+          {user && renderBadges()}
 
           {/* Seção de Próximos Eventos */}
           <View style={styles.section}>
@@ -550,17 +705,32 @@ export default function Home() {
             </View>
           </View>
 
-          {/* Seção Em Breve */}
+          {/* Seção de Descoberta */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <MaterialCommunityIcons name="star-outline" size={24} color={Colors.primary.magenta} />
-              <Text style={styles.sectionTitle}>Em Breve</Text>
+              <MaterialCommunityIcons name="compass" size={24} color={Colors.primary.orange} />
+              <Text style={styles.sectionTitle}>Descubra Novos Eventos</Text>
             </View>
             
-            <View style={styles.comingSoonContainer}>
-              <MaterialCommunityIcons name="rocket-launch" size={48} color={Colors.text.tertiary} />
-              <Text style={styles.comingSoonText}>Novidades serão exibidas aqui!</Text>
-              <Text style={styles.comingSoonSubtext}>Fique ligado para não perder nenhum evento incrível.</Text>
+            <View style={styles.discoveryContainer}>
+              <MaterialCommunityIcons name="map-search" size={48} color={Colors.text.tertiary} />
+              <Text style={styles.discoveryText}>Explore eventos por categoria</Text>
+              <Text style={styles.discoverySubtext}>Encontre shows, festas e experiências únicas.</Text>
+              
+              <View style={styles.categoryButtons}>
+                <TouchableOpacity style={styles.categoryButton}>
+                  <MaterialCommunityIcons name="music" size={20} color={Colors.primary.purple} />
+                  <Text style={styles.categoryButtonText}>Shows</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.categoryButton}>
+                  <MaterialCommunityIcons name="party-popper" size={20} color={Colors.primary.magenta} />
+                  <Text style={styles.categoryButtonText}>Festas</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.categoryButton}>
+                  <MaterialCommunityIcons name="theater" size={20} color={Colors.primary.orange} />
+                  <Text style={styles.categoryButtonText}>Teatro</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </ScrollView>
@@ -691,446 +861,23 @@ export default function Home() {
           )}
         </View>
       </Modal>
+
+      {/* Modal de Level Up */}
+      <Modal visible={showLevelUp} animationType="slide" transparent>
+        <View style={styles.levelUpOverlay}>
+          <View style={styles.levelUpModal}>
+            <MaterialCommunityIcons name="trophy" size={64} color={Colors.primary.orange} />
+            <Text style={styles.levelUpTitle}>Parabéns!</Text>
+            <Text style={styles.levelUpText}>Você subiu para o nível {userGameData?.level || 1}!</Text>
+            <TouchableOpacity 
+              style={styles.levelUpButton}
+              onPress={() => setShowLevelUp(false)}
+            >
+              <Text style={styles.levelUpButtonText}>Continuar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.neutral.white,
-    paddingTop: Platform.OS === 'android' ? 25 : 0,
-  },
-  
-  // Header Styles
-  header: {
-    backgroundColor: Colors.neutral.black,
-    paddingVertical: Spacing.xl,
-    paddingHorizontal: Spacing.container.horizontal,
-    elevation: Spacing.elevation.high,
-    shadowColor: Colors.shadow.dark,
-    shadowOffset: Spacing.shadowOffset.medium,
-    shadowOpacity: 0.3,
-    shadowRadius: Spacing.shadowRadius.medium,
-  },
-  headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerLogo: {
-    height: 32,
-    flex: 1,
-    marginHorizontal: Spacing.md,
-  },
-  profileButton: {
-    padding: Spacing.xs,
-  },
-  
-  // Loading Styles
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.container.horizontal,
-  },
-  loadingText: {
-    ...Typography.styles.bodyLarge,
-    color: Colors.text.secondary,
-    marginTop: Spacing.md,
-  },
-  
-  // Scroll View Styles
-  scrollView: {
-    flex: 1,
-  },
-  scrollViewContent: {
-    paddingBottom: Spacing.xxxxl,
-  },
-  
-  // Section Styles
-  section: {
-    marginTop: Spacing.section.marginTop,
-    paddingHorizontal: Spacing.container.horizontal,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: Spacing.lg,
-  },
-  sectionTitle: {
-    ...Typography.styles.h2,
-    color: Colors.text.primary,
-    marginLeft: Spacing.sm,
-  },
-  
-  // Stories Styles (Instagram-like)
-  storiesScrollContent: {
-    paddingRight: Spacing.lg,
-  },
-  storyCard: {
-    alignItems: 'center',
-    width: 80,
-  },
-  storyImageContainer: {
-    position: 'relative',
-    marginBottom: Spacing.sm,
-  },
-  storyImage: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    borderWidth: 3,
-    borderColor: Colors.neutral.white,
-  },
-  storyBorder: {
-    position: 'absolute',
-    top: -3,
-    left: -3,
-    right: -3,
-    bottom: -3,
-    borderRadius: 38,
-    zIndex: -1,
-  },
-  storyVibeBadge: {
-    position: 'absolute',
-    top: -2,
-    right: -2,
-    backgroundColor: Colors.primary.magenta,
-    borderRadius: 10,
-    width: 20,
-    height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: Colors.neutral.white,
-  },
-  storyTitle: {
-    ...Typography.styles.bodySmall,
-    color: Colors.text.primary,
-    textAlign: 'center',
-    lineHeight: 14,
-  },
-  
-  // Event Card Styles
-  eventsGrid: {
-    gap: Spacing.lg,
-  },
-  eventCard: {
-    backgroundColor: Colors.neutral.white,
-    borderRadius: Spacing.card.borderRadius,
-    elevation: Spacing.elevation.medium,
-    shadowColor: Colors.shadow.medium,
-    shadowOffset: Spacing.shadowOffset.small,
-    shadowOpacity: 0.15,
-    shadowRadius: Spacing.shadowRadius.small,
-    overflow: 'hidden',
-  },
-  eventImageContainer: {
-    position: 'relative',
-    height: 180,
-  },
-  eventImage: {
-    width: '100%',
-    height: '100%',
-  },
-  eventImageDisabled: {
-    opacity: 0.5,
-  },
-  eventDisabledOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: Colors.overlay.modal,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  eventDisabledText: {
-    ...Typography.styles.bodyMedium,
-    color: Colors.text.onPrimary,
-    marginTop: Spacing.xs,
-    fontWeight: Typography.fontWeight.semiBold,
-  },
-  eventHighVibeBadge: {
-    position: 'absolute',
-    top: Spacing.md,
-    right: Spacing.md,
-    backgroundColor: Colors.primary.magenta,
-    borderRadius: 10,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xs,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  eventHighVibeBadgeText: {
-    ...Typography.styles.caption,
-    color: Colors.text.onPrimary,
-    marginLeft: Spacing.xs,
-    fontWeight: Typography.fontWeight.semiBold,
-  },
-  eventCardContent: {
-    padding: Spacing.card.padding,
-  },
-  eventName: {
-    ...Typography.styles.h3,
-    color: Colors.text.primary,
-    marginBottom: Spacing.sm,
-  },
-  eventInfoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: Spacing.xs,
-  },
-  eventInfoText: {
-    ...Typography.styles.bodyMedium,
-    color: Colors.text.secondary,
-    marginLeft: Spacing.xs,
-  },
-  vibeMessage: {
-    ...Typography.styles.bodySmall,
-    color: Colors.text.tertiary,
-    marginTop: Spacing.sm,
-    marginBottom: Spacing.md,
-  },
-  vibeButtonSmall: {
-    borderRadius: 15,
-    overflow: 'hidden',
-    alignSelf: 'flex-start',
-    marginBottom: Spacing.md,
-  },
-  vibeButtonSmallGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-  },
-  vibeButtonSmallText: {
-    ...Typography.styles.buttonSmall,
-    color: Colors.text.onPrimary,
-    marginLeft: Spacing.xs,
-  },
-  actionButton: {
-    borderRadius: Spacing.button.borderRadius,
-    overflow: 'hidden',
-  },
-  actionButtonGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.button.paddingHorizontal,
-    paddingVertical: Spacing.button.paddingVertical,
-  },
-  actionButtonText: {
-    ...Typography.styles.button,
-    color: Colors.text.onPrimary,
-    marginLeft: Spacing.xs,
-  },
-  
-  // Location Styles
-  locationMessage: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: Spacing.md,
-  },
-  locationMessageText: {
-    ...Typography.styles.bodyMedium,
-    color: Colors.text.secondary,
-    marginLeft: Spacing.xs,
-  },
-  mapContainer: {
-    height: 200,
-    borderRadius: Spacing.card.borderRadius,
-    overflow: 'hidden',
-    elevation: Spacing.elevation.medium,
-    shadowColor: Colors.shadow.medium,
-    shadowOffset: Spacing.shadowOffset.medium,
-    shadowOpacity: 0.2,
-    shadowRadius: Spacing.shadowRadius.medium,
-  },
-  map: {
-    flex: 1,
-  },
-  
-  // Coming Soon Styles
-  comingSoonContainer: {
-    alignItems: 'center',
-    paddingVertical: Spacing.xxxl,
-  },
-  comingSoonText: {
-    ...Typography.styles.bodyLarge,
-    color: Colors.text.secondary,
-    marginTop: Spacing.lg,
-    textAlign: 'center',
-  },
-  comingSoonSubtext: {
-    ...Typography.styles.bodyMedium,
-    color: Colors.text.tertiary,
-    marginTop: Spacing.xs,
-    textAlign: 'center',
-  },
-  
-  // Story Modal Styles (Instagram-like)
-  storyModalOverlay: {
-    flex: 1,
-    backgroundColor: Colors.story.background,
-  },
-  storyModalBackground: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    width: width,
-    height: height,
-  },
-  storyModalDarkOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: Colors.story.overlay,
-  },
-  storyModalHeader: {
-    paddingTop: Platform.OS === 'ios' ? 50 : 30,
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
-  },
-  storyModalProgress: {
-    height: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderRadius: 2,
-    marginBottom: Spacing.md,
-  },
-  storyProgressBar: {
-    height: '100%',
-    width: '100%',
-    backgroundColor: Colors.story.text,
-    borderRadius: 2,
-  },
-  storyModalHeaderContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  storyModalEventInfo: {
-    flex: 1,
-  },
-  storyModalEventName: {
-    ...Typography.styles.h3,
-    color: Colors.story.text,
-    fontWeight: Typography.fontWeight.bold,
-  },
-  storyModalEventDate: {
-    ...Typography.styles.bodyMedium,
-    color: Colors.story.text,
-    opacity: 0.8,
-    marginTop: 2,
-  },
-  storyModalCloseButton: {
-    padding: Spacing.sm,
-  },
-  storyModalContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
-  },
-  storyUrgencyBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 20,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    marginBottom: Spacing.xl,
-  },
-  storyUrgencyText: {
-    ...Typography.styles.bodyLarge,
-    color: Colors.story.text,
-    marginLeft: Spacing.sm,
-    fontWeight: Typography.fontWeight.semiBold,
-  },
-  storyVibeMessage: {
-    ...Typography.styles.bodyLarge,
-    color: Colors.story.text,
-    textAlign: 'center',
-    opacity: 0.9,
-  },
-  storyModalActions: {
-    paddingHorizontal: Spacing.xl,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
-    gap: Spacing.md,
-  },
-  storyActionButton: {
-    borderRadius: Spacing.button.borderRadius,
-    overflow: 'hidden',
-  },
-  storyPrimaryButton: {
-    borderRadius: Spacing.button.borderRadius,
-    overflow: 'hidden',
-  },
-  storyActionButtonGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.lg,
-  },
-  storyActionButtonText: {
-    ...Typography.styles.button,
-    color: Colors.story.text,
-    marginLeft: Spacing.sm,
-  },
-  
-  // Estilos para visualização completa
-  verConteudoButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 20,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    marginTop: Spacing.xl,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  verConteudoButtonText: {
-    ...Typography.styles.bodySmall,
-    color: Colors.story.text,
-    marginLeft: Spacing.xs,
-    opacity: 0.9,
-  },
-  voltarButton: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 60 : 40,
-    left: Spacing.lg,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    borderRadius: 20,
-    padding: Spacing.sm,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  pulsatingContainer: {
-    position: 'absolute',
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: 'rgba(66, 133, 244, 0.3)',
-  },
-  userLocationDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#4285F4',
-    borderWidth: 1,
-    borderColor: '#fff',
-  },
-
-});
