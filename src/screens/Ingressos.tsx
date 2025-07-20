@@ -4,17 +4,18 @@ import { useEffect, useState, useContext } from "react"
 import {
   View,
   Text,
-  StyleSheet,
   FlatList,
   TouchableOpacity,
   Image,
   ScrollView,
   ActivityIndicator,
-  Dimensions,
   Alert,
+  SafeAreaView,
+  StatusBar,
   Platform,
 } from "react-native"
-import { Ionicons } from "@expo/vector-icons"
+import { MaterialCommunityIcons } from "@expo/vector-icons"
+import { LinearGradient } from "expo-linear-gradient"
 import { ref, get } from "firebase/database"
 import { database } from "../services/firebase"
 import QRCode from "react-native-qrcode-svg"
@@ -22,7 +23,8 @@ import { AuthContext } from "../contexts/AuthContext"
 import { useNavigation } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
-const { width } = Dimensions.get("window")
+// Importação dos estilos corrigidos
+import { ingressosStyles } from '../constants/IngressosStyle'
 
 interface Ticket {
   codigo: string
@@ -32,7 +34,6 @@ interface Ticket {
 }
 
 interface EventSummary {
-  // Interface para a lista inicial de eventos (apenas resumo)
   eventid: string
   nomeevento: string
   imageurl: string
@@ -42,18 +43,17 @@ interface EventSummary {
 }
 
 interface EventDetails extends EventSummary {
-  // Interface para os detalhes completos do evento (com ingressos)
   ingressos: Ticket[]
 }
 
 export default function Ingressos() {
   const { user } = useContext(AuthContext)
   const [userData, setUserData] = useState<any>(null)
-  const [eventos, setEventos] = useState<EventSummary[]>([]) // Armazena apenas o resumo dos eventos
-  const [selectedEvento, setSelectedEvento] = useState<EventDetails | null>(null) // Armazena os detalhes completos do evento selecionado
+  const [eventos, setEventos] = useState<EventSummary[]>([])
+  const [selectedEvento, setSelectedEvento] = useState<EventDetails | null>(null)
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
-  const [loading, setLoading] = useState(false) // Para o carregamento inicial da lista de eventos
-  const [eventDetailsLoading, setEventDetailsLoading] = useState(false) // Para o carregamento dos detalhes de um evento específico
+  const [loading, setLoading] = useState(false)
+  const [eventDetailsLoading, setEventDetailsLoading] = useState(false)
   const [viewMode, setViewMode] = useState<"events" | "eventDetails" | "ticketDetails">("events")
   const navigation = useNavigation()
   const insets = useSafeAreaInsets()
@@ -87,13 +87,11 @@ export default function Ingressos() {
     }
   }, [userData])
 
-  // Carrega apenas o resumo dos eventos (nome, imagem, quantidade de ingressos)
   const carregarEventosAgrupados = async () => {
     setLoading(true)
     const ingressosComprados = userData.ingressoscomprados
     const grupos: { [key: string]: Ticket[] } = {}
 
-    // Agrupa ingressos por eventid para obter as contagens
     for (const codigo in ingressosComprados) {
       const ingresso = ingressosComprados[codigo]
       const eventid = ingresso.eventid
@@ -103,7 +101,6 @@ export default function Ingressos() {
 
     const listaEventos: EventSummary[] = []
 
-    // Busca apenas os resumos dos eventos (sem os detalhes dos ingressos individuais)
     for (const eventid in grupos) {
       try {
         const snapEvento = await get(ref(database, `eventos/${eventid}`))
@@ -114,7 +111,7 @@ export default function Ingressos() {
           imageurl: eventoData.imageurl || "",
           dataevento: eventoData.dataevento || "",
           local: eventoData.local || "",
-          quantidadeTotal: grupos[eventid].length, // Apenas a contagem é necessária aqui
+          quantidadeTotal: grupos[eventid].length,
         })
       } catch (error) {
         console.error("Erro ao buscar evento:", error)
@@ -125,7 +122,6 @@ export default function Ingressos() {
     setLoading(false)
   }
 
-  // Carrega os detalhes completos de um evento, incluindo seus ingressos
   const carregarIngressosDoEvento = async (eventid: string) => {
     setEventDetailsLoading(true)
     try {
@@ -147,7 +143,7 @@ export default function Ingressos() {
         imageurl: eventoData.imageurl || "",
         dataevento: eventoData.dataevento || "",
         local: eventoData.local || "",
-        ingressos: ingressosDoUsuarioParaEsteEvento, // Agora inclui os ingressos reais
+        ingressos: ingressosDoUsuarioParaEsteEvento,
         quantidadeTotal: ingressosDoUsuarioParaEsteEvento.length,
       }
       setSelectedEvento(fullEventDetails)
@@ -160,8 +156,7 @@ export default function Ingressos() {
   }
 
   const handleEventSelect = (eventoSummary: EventSummary) => {
-    // Ao selecionar um evento, aciona o carregamento de seus detalhes completos
-    setSelectedEvento(null) // Limpa a seleção anterior para mostrar o loader
+    setSelectedEvento(null)
     setViewMode("eventDetails")
     carregarIngressosDoEvento(eventoSummary.eventid)
   }
@@ -177,7 +172,7 @@ export default function Ingressos() {
       setSelectedTicket(null)
     } else if (viewMode === "eventDetails") {
       setViewMode("events")
-      setSelectedEvento(null) // Limpa o evento selecionado ao voltar para a lista de eventos
+      setSelectedEvento(null)
     } else {
       navigation.goBack()
     }
@@ -191,12 +186,6 @@ export default function Ingressos() {
     )
   }
 
-  const handleShareTicket = () => {
-    Alert.alert("Compartilhar", "Funcionalidade de compartilhamento em desenvolvimento.", [
-      { text: "OK", style: "default" },
-    ])
-  }
-
   const getHeaderTitle = () => {
     switch (viewMode) {
       case "eventDetails":
@@ -208,31 +197,30 @@ export default function Ingressos() {
     }
   }
 
-  // Calcula o padding inferior para evitar sobreposição com a barra de ações
-  const bottomBarHeight = 70 // Altura aproximada da barra de ações inferior
-  const contentPaddingBottom = insets.bottom + bottomBarHeight
+  const contentPaddingBottom = insets.bottom + 80
 
   if (!user?.cpf || !userData) {
     return (
-      <View style={[styles.safeContainer, { paddingTop: insets.top }]}>
+      <View style={ingressosStyles.safeContainer}>
+        <StatusBar barStyle="light-content" backgroundColor="#000000" />
+        
         <Header
           title="Meus Ingressos"
           onBackPress={() => navigation.goBack()}
           showBackButton={true}
           isMainTitle={true}
+          insets={insets}
         />
-        <View style={[styles.contentContainer, { paddingBottom: contentPaddingBottom }]}>
+        <View style={[ingressosStyles.contentContainer, { paddingBottom: contentPaddingBottom }]}>
           <EmptyState
             icon="ticket-outline"
             title="Acesso Necessário"
             message="Você precisa estar logado para visualizar seus ingressos."
           />
         </View>
-        {/* Bottom Action Bar - Mantido como solicitado */}
         <BottomActionBar
           viewMode={viewMode}
           onTransfer={handleTransferTicket}
-          onShare={handleShareTicket}
           selectedTicket={selectedTicket}
           selectedEvento={selectedEvento}
           insetsBottom={insets.bottom}
@@ -243,21 +231,22 @@ export default function Ingressos() {
 
   if (loading) {
     return (
-      <View style={[styles.safeContainer, { paddingTop: insets.top }]}>
+      <View style={ingressosStyles.safeContainer}>
+        <StatusBar barStyle="light-content" backgroundColor="#000000" />
+        
         <Header
           title="Meus Ingressos"
           onBackPress={() => navigation.goBack()}
           showBackButton={true}
           isMainTitle={true}
+          insets={insets}
         />
-        <View style={[styles.contentContainer, { paddingBottom: contentPaddingBottom }]}>
+        <View style={[ingressosStyles.contentContainer, { paddingBottom: contentPaddingBottom }]}>
           <LoadingState message="Carregando seus eventos..." />
         </View>
-        {/* Bottom Action Bar - Mantido como solicitado */}
         <BottomActionBar
           viewMode={viewMode}
           onTransfer={handleTransferTicket}
-          onShare={handleShareTicket}
           selectedTicket={selectedTicket}
           selectedEvento={selectedEvento}
           insetsBottom={insets.bottom}
@@ -267,15 +256,18 @@ export default function Ingressos() {
   }
 
   return (
-    <View style={[styles.safeContainer, { paddingTop: insets.top }]}>
+    <View style={ingressosStyles.safeContainer}>
+      <StatusBar barStyle="light-content" backgroundColor="#000000" />
+      
       <Header
         title={getHeaderTitle()}
         onBackPress={handleBackPress}
         showBackButton={viewMode !== "events"}
         isMainTitle={viewMode === "events"}
+        insets={insets}
       />
 
-      <View style={[styles.contentContainer, { paddingBottom: contentPaddingBottom }]}>
+      <View style={[ingressosStyles.contentContainer, { paddingBottom: contentPaddingBottom }]}>
         {viewMode === "events" && <EventsListView eventos={eventos} onEventSelect={handleEventSelect} />}
 
         {viewMode === "eventDetails" && eventDetailsLoading && (
@@ -290,11 +282,9 @@ export default function Ingressos() {
         )}
       </View>
 
-      {/* Bottom Action Bar - COPIADO EXATAMENTE DO CÓDIGO DO USUÁRIO */}
       <BottomActionBar
         viewMode={viewMode}
         onTransfer={handleTransferTicket}
-        onShare={handleShareTicket}
         selectedTicket={selectedTicket}
         selectedEvento={selectedEvento}
         insetsBottom={insets.bottom}
@@ -303,20 +293,71 @@ export default function Ingressos() {
   )
 }
 
-// Componente do Bottom Action Bar - COPIADO EXATAMENTE DO CÓDIGO DO USUÁRIO
+// ===== COMPONENTE HEADER CORRIGIDO =====
+function Header({
+  title,
+  onBackPress,
+  showBackButton = true,
+  isMainTitle = false,
+  insets,
+}: {
+  title: string
+  onBackPress: () => void
+  showBackButton?: boolean
+  isMainTitle?: boolean
+  insets: any
+}) {
+  // CORREÇÃO: Calcular o padding top correto para Android e iOS
+  const headerPaddingTop = Platform.OS === 'android' 
+    ? insets.top + 16  // Para Android, usar insets.top + padding normal
+    : 16;              // Para iOS, SafeAreaView já cuida da área segura
+  
+  const headerPaddingBottom = 16;
+
+  return (
+    <View style={[
+      ingressosStyles.headerWithSafeArea,
+      {
+        paddingTop: headerPaddingTop,
+        paddingBottom: headerPaddingBottom,
+      }
+    ]}>
+      <View style={ingressosStyles.headerLeft}>
+        {showBackButton ? (
+          <TouchableOpacity onPress={onBackPress} style={ingressosStyles.backButton}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+        ) : (
+          <View style={ingressosStyles.backButtonPlaceholder} />
+        )}
+      </View>
+
+      <View style={ingressosStyles.headerCenter}>
+        <Text
+          style={[ingressosStyles.headerTitle, isMainTitle ? ingressosStyles.mainHeaderTitle : ingressosStyles.subHeaderTitle]}
+          numberOfLines={1}
+        >
+          {title}
+        </Text>
+      </View>
+
+      <View style={ingressosStyles.headerRight} />
+    </View>
+  )
+}
+
+// ===== COMPONENTE BOTTOM ACTION BAR REDESENHADO =====
 function BottomActionBar({
   viewMode,
   onTransfer,
-  onShare,
   selectedTicket,
   selectedEvento,
   insetsBottom,
 }: {
   viewMode: string
   onTransfer: () => void
-  onShare: () => void
   selectedTicket: Ticket | null
-  selectedEvento: Event | null
+  selectedEvento: EventDetails | null
   insetsBottom: number
 }) {
   const getActions = () => {
@@ -324,16 +365,16 @@ function BottomActionBar({
       case "ticketDetails":
         return [
           {
-            icon: "swap-horizontal-outline",
+            icon: "swap-horizontal",
             label: "Transferir",
             onPress: onTransfer,
-            disabled: true, // Inativo conforme solicitado
+            disabled: true,
           },
         ]
       case "eventDetails":
         return [
           {
-            icon: "swap-horizontal-outline",
+            icon: "swap-horizontal",
             label: "Transferir",
             onPress: onTransfer,
             disabled: true,
@@ -342,7 +383,7 @@ function BottomActionBar({
       default:
         return [
           {
-            icon: "swap-horizontal-outline",
+            icon: "swap-horizontal",
             label: "Transferir",
             onPress: onTransfer,
             disabled: true,
@@ -354,17 +395,21 @@ function BottomActionBar({
   const actions = getActions()
 
   return (
-    <View style={[styles.bottomActionBar, { paddingBottom: insetsBottom }]}>
+    <View style={[ingressosStyles.bottomActionBar, { paddingBottom: insetsBottom }]}>
       {actions.map((action, index) => (
         <TouchableOpacity
           key={index}
-          style={[styles.actionButton, action.disabled && styles.actionButtonDisabled]}
+          style={[ingressosStyles.actionButton, action.disabled && ingressosStyles.actionButtonDisabled]}
           onPress={action.disabled ? undefined : action.onPress}
           disabled={action.disabled}
           activeOpacity={action.disabled ? 1 : 0.7}
         >
-          <Ionicons name={action.icon as any} size={20} color={action.disabled ? "#ccc" : "#6200ee"} />
-          <Text style={[styles.actionButtonText, action.disabled && styles.actionButtonTextDisabled]}>
+          <MaterialCommunityIcons 
+            name={action.icon as any} 
+            size={20} 
+            color={action.disabled ? "#9CA3AF" : "#6366F1"} 
+          />
+          <Text style={[ingressosStyles.actionButtonText, action.disabled && ingressosStyles.actionButtonTextDisabled]}>
             {action.label}
           </Text>
         </TouchableOpacity>
@@ -373,66 +418,29 @@ function BottomActionBar({
   )
 }
 
-// Componente Header atualizado
-function Header({
-  title,
-  onBackPress,
-  showBackButton = true,
-  isMainTitle = false,
-}: {
-  title: string
-  onBackPress: () => void
-  showBackButton?: boolean
-  isMainTitle?: boolean
-}) {
-  return (
-    <View style={styles.header}>
-      <View style={styles.headerLeft}>
-        {showBackButton ? (
-          <TouchableOpacity onPress={onBackPress} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={28} color="#fff" />
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.backButtonPlaceholder} />
-        )}
-      </View>
-
-      <View style={styles.headerCenter}>
-        <Text
-          style={[styles.headerTitle, isMainTitle ? styles.mainHeaderTitle : styles.subHeaderTitle]}
-          numberOfLines={1}
-        >
-          {title}
-        </Text>
-      </View>
-
-      <View style={styles.headerRight} />
-    </View>
-  )
-}
-
-// Componentes auxiliares
+// ===== COMPONENTES AUXILIARES REDESENHADOS =====
 function EmptyState({ icon, title, message }: { icon: string; title: string; message: string }) {
   return (
-    <View style={styles.emptyState}>
-      <View style={styles.emptyIconContainer}>
-        <Ionicons name={icon as any} size={64} color="#ccc" />
+    <View style={ingressosStyles.emptyState}>
+      <View style={ingressosStyles.emptyIconContainer}>
+        <MaterialCommunityIcons name={icon as any} size={64} color="#9CA3AF" />
       </View>
-      <Text style={styles.emptyTitle}>{title}</Text>
-      <Text style={styles.emptyMessage}>{message}</Text>
+      <Text style={ingressosStyles.emptyTitle}>{title}</Text>
+      <Text style={ingressosStyles.emptyMessage}>{message}</Text>
     </View>
   )
 }
 
 function LoadingState({ message = "Carregando..." }: { message?: string }) {
   return (
-    <View style={styles.loadingContainer}>
-      <ActivityIndicator size="large" color="#000" />
-      <Text style={styles.loadingText}>{message}</Text>
+    <View style={ingressosStyles.loadingContainer}>
+      <ActivityIndicator size="large" color="#6366F1" />
+      <Text style={ingressosStyles.loadingText}>{message}</Text>
     </View>
   )
 }
 
+// ===== LISTA DE EVENTOS COMPLETAMENTE REDESENHADA =====
 function EventsListView({
   eventos,
   onEventSelect,
@@ -442,57 +450,90 @@ function EventsListView({
       <EmptyState
         icon="calendar-outline"
         title="Nenhum Ingresso"
-        message="Você ainda não possui ingressos. Explore nossos eventos e garante o seu!"
+        message="Você ainda não possui ingressos. Explore nossos eventos e garanta o seu!"
       />
     )
   }
 
+  const totalIngressos = eventos.reduce((total, evento) => total + evento.quantidadeTotal, 0)
+
   return (
-    <View style={styles.container}>
-      <View style={styles.summaryCard}>
-        <Text style={styles.summaryTitle}>Resumo</Text>
-        <Text style={styles.summaryText}>
-          {eventos.length} evento{eventos.length !== 1 ? "s" : ""} •{" "}
-          {eventos.reduce((total, evento) => total + evento.quantidadeTotal, 0)} ingresso
-          {eventos.reduce((total, evento) => total + evento.quantidadeTotal, 0) !== 1 ? "s" : ""}
-        </Text>
+    <View style={ingressosStyles.container}>
+      {/* Summary Card Redesenhado */}
+      <View style={ingressosStyles.summaryCard}>
+        <View style={ingressosStyles.summaryHeader}>
+          <View style={ingressosStyles.summaryIcon}>
+            <MaterialCommunityIcons name="ticket-confirmation" size={20} color="#FFFFFF" />
+          </View>
+          <Text style={ingressosStyles.summaryTitle}>Seus Ingressos</Text>
+        </View>
+        <View style={ingressosStyles.summaryStats}>
+          <View style={ingressosStyles.summaryStatItem}>
+            <Text style={ingressosStyles.summaryStatNumber}>{eventos.length}</Text>
+            <Text style={ingressosStyles.summaryStatLabel}>
+              {eventos.length === 1 ? 'Evento' : 'Eventos'}
+            </Text>
+          </View>
+          <View style={ingressosStyles.summaryStatItem}>
+            <Text style={ingressosStyles.summaryStatNumber}>{totalIngressos}</Text>
+            <Text style={ingressosStyles.summaryStatLabel}>
+              {totalIngressos === 1 ? 'Ingresso' : 'Ingressos'}
+            </Text>
+          </View>
+        </View>
       </View>
 
+      {/* Lista de Eventos Compacta */}
       <FlatList
         data={eventos}
         keyExtractor={(item) => item.eventid}
-        contentContainerStyle={styles.listContainer}
+        contentContainerStyle={ingressosStyles.listContainer}
         showsVerticalScrollIndicator={false}
         renderItem={({ item }) => (
-          <TouchableOpacity activeOpacity={0.8} style={styles.eventCard} onPress={() => onEventSelect(item)}>
-            <View style={styles.eventImageContainer}>
-              {item.imageurl ? (
-                <Image source={{ uri: item.imageurl }} style={styles.eventImage} />
-              ) : (
-                <View style={[styles.eventImage, styles.imagePlaceholder]}>
-                  <Ionicons name="image-outline" size={32} color="#fff" />
+          <TouchableOpacity 
+            activeOpacity={0.8} 
+            style={ingressosStyles.eventCard} 
+            onPress={() => onEventSelect(item)}
+          >
+            <View style={ingressosStyles.eventCardContent}>
+              {/* Imagem do Evento Compacta */}
+              <View style={ingressosStyles.eventImageContainer}>
+                {item.imageurl ? (
+                  <Image source={{ uri: item.imageurl }} style={ingressosStyles.eventImage} />
+                ) : (
+                  <View style={[ingressosStyles.eventImage, ingressosStyles.imagePlaceholder]}>
+                    <MaterialCommunityIcons name="image-outline" size={24} color="#9CA3AF" />
+                  </View>
+                )}
+                <View style={ingressosStyles.ticketBadge}>
+                  <Text style={ingressosStyles.ticketBadgeText}>{item.quantidadeTotal}</Text>
                 </View>
-              )}
-              <View style={styles.ticketBadge}>
-                <Text style={styles.ticketBadgeText}>{item.quantidadeTotal}</Text>
               </View>
-            </View>
 
-            <View style={styles.eventInfo}>
-              <Text style={styles.eventName} numberOfLines={2}>
-                {item.nomeevento}
-              </Text>
-              {item.dataevento && <Text style={styles.eventDate}>{item.dataevento}</Text>}
-              {item.local && (
-                <Text style={styles.eventLocation} numberOfLines={1}>
-                  {item.local}
-                </Text>
-              )}
-              <View style={styles.eventFooter}>
-                <Text style={styles.ticketCount}>
-                  {item.quantidadeTotal} ingresso{item.quantidadeTotal !== 1 ? "s" : ""}
-                </Text>
-                <Ionicons name="chevron-forward" size={20} color="#000" />
+              {/* Informações do Evento */}
+              <View style={ingressosStyles.eventInfo}>
+                <View style={ingressosStyles.eventHeader}>
+                  <Text style={ingressosStyles.eventName} numberOfLines={2}>
+                    {item.nomeevento}
+                  </Text>
+                  {item.dataevento && (
+                    <Text style={ingressosStyles.eventDate}>{item.dataevento}</Text>
+                  )}
+                  {item.local && (
+                    <Text style={ingressosStyles.eventLocation} numberOfLines={1}>
+                      {item.local}
+                    </Text>
+                  )}
+                </View>
+                
+                <View style={ingressosStyles.eventFooter}>
+                  <Text style={ingressosStyles.ticketCount}>
+                    {item.quantidadeTotal} {item.quantidadeTotal === 1 ? 'ingresso' : 'ingressos'}
+                  </Text>
+                  <View style={ingressosStyles.eventArrow}>
+                    <MaterialCommunityIcons name="chevron-right" size={16} color="#6B7280" />
+                  </View>
+                </View>
               </View>
             </View>
           </TouchableOpacity>
@@ -502,63 +543,68 @@ function EventsListView({
   )
 }
 
+// ===== EVENT DETAILS VIEW REDESENHADA =====
 function EventDetailsView({
   evento,
   onTicketSelect,
 }: { evento: EventDetails; onTicketSelect: (ticket: Ticket) => void }) {
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      <View style={styles.eventDetailsHeader}>
+    <ScrollView style={ingressosStyles.container} showsVerticalScrollIndicator={false}>
+      <View style={ingressosStyles.eventDetailsHeader}>
         {evento.imageurl ? (
-          <Image source={{ uri: evento.imageurl }} style={styles.eventDetailImage} />
+          <Image source={{ uri: evento.imageurl }} style={ingressosStyles.eventDetailImage} />
         ) : (
-          <View style={[styles.eventDetailImage, styles.imagePlaceholder]}>
-            <Ionicons name="image-outline" size={48} color="#fff" />
+          <View style={[ingressosStyles.eventDetailImage, ingressosStyles.imagePlaceholder]}>
+            <MaterialCommunityIcons name="image-outline" size={48} color="#9CA3AF" />
           </View>
         )}
 
-        <View style={styles.eventDetailsInfo}>
-          <Text style={styles.eventDetailName}>{evento.nomeevento}</Text>
+        <View style={ingressosStyles.eventDetailsInfo}>
+          <Text style={ingressosStyles.eventDetailName}>{evento.nomeevento}</Text>
           {evento.dataevento && (
-            <View style={styles.eventDetailRow}>
-              <Ionicons name="calendar-outline" size={16} color="#666" />
-              <Text style={styles.eventDetailText}>{evento.dataevento}</Text>
+            <View style={ingressosStyles.eventDetailRow}>
+              <View style={ingressosStyles.eventDetailIcon}>
+                <MaterialCommunityIcons name="calendar-outline" size={20} color="#6366F1" />
+              </View>
+              <Text style={ingressosStyles.eventDetailText}>{evento.dataevento}</Text>
             </View>
           )}
           {evento.local && (
-            <View style={styles.eventDetailRow}>
-              <Ionicons name="location-outline" size={16} color="#666" />
-              <Text style={styles.eventDetailText}>{evento.local}</Text>
+            <View style={ingressosStyles.eventDetailRow}>
+              <View style={ingressosStyles.eventDetailIcon}>
+                <MaterialCommunityIcons name="map-marker-outline" size={20} color="#6366F1" />
+              </View>
+              <Text style={ingressosStyles.eventDetailText}>{evento.local}</Text>
             </View>
           )}
         </View>
       </View>
 
-      <View style={styles.ticketsSection}>
-        <Text style={styles.sectionTitle}>Seus Ingressos ({evento.quantidadeTotal})</Text>
+      <View style={ingressosStyles.ticketsSection}>
+        <Text style={ingressosStyles.sectionTitle}>Seus Ingressos ({evento.quantidadeTotal})</Text>
 
         {evento.ingressos.map((ticket, index) => (
           <TouchableOpacity
             key={ticket.codigo}
-            style={styles.ticketCard}
+            style={ingressosStyles.ticketCard}
             onPress={() => onTicketSelect(ticket)}
             activeOpacity={0.8}
           >
-            <View style={styles.ticketCardLeft}>
-              <View style={styles.ticketIcon}>
-                <Ionicons name="ticket" size={24} color="#000" />
+            <View style={ingressosStyles.ticketCardLeft}>
+              <View style={ingressosStyles.ticketIcon}>
+                <MaterialCommunityIcons name="ticket" size={24} color="#FFFFFF" />
               </View>
-              <View>
-                <Text style={styles.ticketType}>{ticket.tipo}</Text>
-                <Text style={styles.ticketCode}>#{ticket.codigo.slice(-8)}</Text>
+              <View style={ingressosStyles.ticketInfo}>
+                <Text style={ingressosStyles.ticketType}>{ticket.tipo}</Text>
+                <Text style={ingressosStyles.ticketCode}>#{ticket.codigo.slice(-8)}</Text>
               </View>
             </View>
 
-            <View style={styles.ticketCardRight}>
-              <View style={styles.qrCodePreview}>
-                <Ionicons name="qr-code-outline" size={20} color="#000" />
+            <View style={ingressosStyles.ticketCardRight}>
+              <View style={ingressosStyles.qrCodePreview}>
+                <MaterialCommunityIcons name="qrcode" size={20} color="#6B7280" />
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#ccc" />
+              <MaterialCommunityIcons name="chevron-right" size={20} color="#D1D5DB" />
             </View>
           </TouchableOpacity>
         ))}
@@ -567,476 +613,58 @@ function EventDetailsView({
   )
 }
 
+// ===== TICKET DETAILS VIEW REDESENHADA =====
 function TicketDetailsView({ ticket, evento }: { ticket: Ticket; evento: EventDetails }) {
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.ticketDetailsContainer}>
-      <View style={styles.ticketDetailsCard}>
-        <View style={styles.ticketHeader}>
-          <Text style={styles.ticketEventName}>{evento.nomeevento}</Text>
-          <Text style={styles.ticketTypeDetail}>{ticket.tipo}</Text>
+    <ScrollView style={ingressosStyles.container} contentContainerStyle={ingressosStyles.ticketDetailsContainer}>
+      <View style={ingressosStyles.ticketDetailsCard}>
+        <View style={ingressosStyles.ticketHeader}>
+          <Text style={ingressosStyles.ticketEventName}>{evento.nomeevento}</Text>
+          <Text style={ingressosStyles.ticketTypeDetail}>{ticket.tipo}</Text>
         </View>
 
-        <View style={styles.qrCodeContainer}>
+        <View style={ingressosStyles.qrCodeContainer}>
           <QRCode value={ticket.codigo} size={200} />
         </View>
 
-        <View style={styles.ticketInfoContainer}>
-          <View style={styles.ticketInfoRow}>
-            <Text style={styles.ticketInfoLabel}>Código do Ingresso</Text>
-            <Text style={styles.ticketInfoValue}>{ticket.codigo}</Text>
+        <View style={ingressosStyles.ticketInfoContainer}>
+          <View style={ingressosStyles.ticketInfoRow}>
+            <Text style={ingressosStyles.ticketInfoLabel}>Código do Ingresso</Text>
+            <Text style={ingressosStyles.ticketInfoValue}>{ticket.codigo}</Text>
           </View>
 
           {evento.dataevento && (
-            <View style={styles.ticketInfoRow}>
-              <Text style={styles.ticketInfoLabel}>Data do Evento</Text>
-              <Text style={styles.ticketInfoValue}>{evento.dataevento}</Text>
+            <View style={ingressosStyles.ticketInfoRow}>
+              <Text style={ingressosStyles.ticketInfoLabel}>Data do Evento</Text>
+              <Text style={ingressosStyles.ticketInfoValue}>{evento.dataevento}</Text>
             </View>
           )}
 
           {evento.local && (
-            <View style={styles.ticketInfoRow}>
-              <Text style={styles.ticketInfoLabel}>Local</Text>
-              <Text style={styles.ticketInfoValue}>{evento.local}</Text>
+            <View style={ingressosStyles.ticketInfoRow}>
+              <Text style={ingressosStyles.ticketInfoLabel}>Local</Text>
+              <Text style={ingressosStyles.ticketInfoValue}>{evento.local}</Text>
             </View>
           )}
         </View>
 
-        <View style={styles.ticketFooter}>
-          <View style={styles.validationBadge}>
-            <Ionicons name="checkmark-circle" size={16} color="#4CAF50" />
-            <Text style={styles.validationText}>Ingresso Válido</Text>
+        <View style={ingressosStyles.ticketFooter}>
+          <View style={ingressosStyles.validationBadge}>
+            <MaterialCommunityIcons name="check-circle" size={16} color="#10B981" />
+            <Text style={ingressosStyles.validationText}>Ingresso Válido</Text>
           </View>
         </View>
       </View>
 
-      <View style={styles.instructionsCard}>
-        <Text style={styles.instructionsTitle}>Instruções</Text>
-        <Text style={styles.instructionsText}>
-          • Apresente este QR Code na entrada do evento{"\n"}• Mantenha o brilho da tela no máximo{"\n"}• Chegue com
-          antecedência para evitar filas{"\n"}• Este ingresso é pessoal e intransferível
+      <View style={ingressosStyles.instructionsCard}>
+        <Text style={ingressosStyles.instructionsTitle}>Instruções</Text>
+        <Text style={ingressosStyles.instructionsText}>
+          • Apresente este QR Code na entrada do evento{"\n"}
+          • Mantenha o brilho da tela no máximo{"\n"}
+          • Chegue com antecedência para evitar filas{"\n"}
+          • Este ingresso é pessoal e intransferível
         </Text>
       </View>
     </ScrollView>
   )
 }
-
-const styles = StyleSheet.create({
-  safeContainer: {
-    flex: 1,
-    backgroundColor: "#f8f9fa",
-  },
-  contentContainer: {
-    flex: 1,
-  },
-  container: {
-    flex: 1,
-  },
-  // Header Styles - Atualizados
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#000", // Preto
-    paddingVertical: 13, // Reduzido para um cabeçalho menor
-    paddingHorizontal: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  headerLeft: {
-    width: 40,
-    alignItems: "flex-start",
-  },
-  headerCenter: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerRight: {
-    width: 40,
-  },
-  logo: {
-    width: 40, // Logo ajustada
-    height: 40, // Logo ajustada
-    marginRight: 10, // Espaçamento entre logo e título
-  },
-  backButton: {
-    padding: 4,
-  },
-  backButtonPlaceholder: {
-    width: 32,
-    height: 32,
-  },
-  headerTitle: {
-    color: "#fff",
-    textAlign: "center",
-  },
-  mainHeaderTitle: {
-    fontSize: 20, // Fonte menor para "Meus Ingressos"
-    letterSpacing: 1, // Espaçamento entre letras para um visual diferente
-    fontFamily: Platform.OS === "ios" ? "Avenir-Heavy" : "Roboto-Bold", // Exemplo de fonte diferente
-  },
-  subHeaderTitle: {
-    fontSize: 20, // Fonte menor para títulos de eventos
-  },
-  // Bottom Action Bar Styles - COPIADO EXATAMENTE DO CÓDIGO DO USUÁRIO
-  bottomActionBar: {
-    flexDirection: "row",
-    backgroundColor: "#fff",
-    borderTopWidth: 1,
-    borderTopColor: "#e0e0e0",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 8,
-    position: "absolute", // Fixa na parte inferior
-    bottom: 0,
-    left: 0,
-    right: 0,
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    marginHorizontal: 4,
-  },
-  actionButtonDisabled: {
-    opacity: 0.5,
-  },
-  actionButtonText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#000", // Mudado para preto
-    marginLeft: 6,
-  },
-  actionButtonTextDisabled: {
-    color: "#ccc",
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 32,
-  },
-  emptyIconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: "#f5f5f5",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 24,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  emptyMessage: {
-    fontSize: 16,
-    color: "#666",
-    textAlign: "center",
-    lineHeight: 24,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: "#666",
-  },
-  summaryCard: {
-    backgroundColor: "#fff",
-    margin: 16,
-    padding: 20,
-    borderRadius: 12,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  summaryTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 4,
-  },
-  summaryText: {
-    fontSize: 14,
-    color: "#666",
-  },
-  listContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 20, // Ajustado para não sobrepor o bottom bar
-  },
-  eventCard: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    marginBottom: 16,
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    overflow: "hidden",
-  },
-  eventImageContainer: {
-    position: "relative",
-  },
-  eventImage: {
-    width: "100%",
-    height: 160,
-    backgroundColor: "#e0e0e0",
-  },
-  imagePlaceholder: {
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#bbb",
-  },
-  ticketBadge: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    backgroundColor: "#000", // Preto
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  ticketBadgeText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  eventInfo: {
-    padding: 16,
-  },
-  eventName: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 8,
-  },
-  eventDate: {
-    fontSize: 14,
-    color: "#000", // Preto
-    marginBottom: 4,
-  },
-  eventLocation: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 12,
-  },
-  eventFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  ticketCount: {
-    fontSize: 14,
-    color: "#666",
-    fontWeight: "500",
-  },
-  eventDetailsHeader: {
-    backgroundColor: "#fff",
-    margin: 16,
-    borderRadius: 16,
-    overflow: "hidden",
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  eventDetailImage: {
-    width: "100%",
-    height: 200,
-    backgroundColor: "#e0e0e0",
-  },
-  eventDetailsInfo: {
-    padding: 20,
-  },
-  eventDetailName: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 12,
-  },
-  eventDetailRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  eventDetailText: {
-    fontSize: 14,
-    color: "#666",
-    marginLeft: 8,
-  },
-  ticketsSection: {
-    margin: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 16,
-  },
-  ticketCard: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  ticketCardLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  ticketIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#e8e8e8", // Cinza claro
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  ticketType: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-  },
-  ticketCode: {
-    fontSize: 12,
-    color: "#666",
-    marginTop: 2,
-  },
-  ticketCardRight: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  qrCodePreview: {
-    width: 32,
-    height: 32,
-    borderRadius: 6,
-    backgroundColor: "#e8e8e8", // Cinza claro
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 8,
-  },
-  ticketDetailsContainer: {
-    padding: 16,
-  },
-  ticketDetailsCard: {
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    padding: 24,
-    marginBottom: 16,
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  ticketHeader: {
-    alignItems: "center",
-    marginBottom: 24,
-  },
-  ticketEventName: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#333",
-    textAlign: "center",
-    marginBottom: 4,
-  },
-  ticketTypeDetail: {
-    fontSize: 16,
-    color: "#000", // Preto
-    fontWeight: "500",
-  },
-  qrCodeContainer: {
-    alignItems: "center",
-    marginBottom: 24,
-    padding: 20,
-    backgroundColor: "#f8f9fa",
-    borderRadius: 12,
-  },
-  ticketInfoContainer: {
-    marginBottom: 20,
-  },
-  ticketInfoRow: {
-    marginBottom: 12,
-  },
-  ticketInfoLabel: {
-    fontSize: 12,
-    color: "#666",
-    textTransform: "uppercase",
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  ticketInfoValue: {
-    fontSize: 16,
-    color: "#333",
-    fontWeight: "500",
-  },
-  ticketFooter: {
-    alignItems: "center",
-  },
-  validationBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#e8f5e8",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  validationText: {
-    fontSize: 12,
-    color: "#4CAF50",
-    fontWeight: "600",
-    marginLeft: 4,
-  },
-  instructionsCard: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 20,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  instructionsTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 12,
-  },
-  instructionsText: {
-    fontSize: 14,
-    color: "#666",
-    lineHeight: 20,
-  },
-})

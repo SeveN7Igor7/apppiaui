@@ -29,9 +29,6 @@ import { Animated, Easing } from 'react-native';
 // Importação dos estilos separados
 import { styles } from '../constants/HomeStyle';
 
-// Importação do GameDataService
-import { GameDataService, UserGameData, badgeConfig } from '../services/GameDataService';
-
 const { width, height } = Dimensions.get('window');
 
 type Evento = {
@@ -57,115 +54,10 @@ export default function Home() {
   const [vibes, setVibes] = useState<Record<string, VibeData>>({});
   const [visualizacaoCompleta, setVisualizacaoCompleta] = useState(false);
   
-  // Estados para gamificação
-  const [userGameData, setUserGameData] = useState<UserGameData | null>(null);
-  const [showLevelUp, setShowLevelUp] = useState(false);
-  const [dailyChallenge, setDailyChallenge] = useState({
-    title: 'Avalie 3 vibes hoje',
-    progress: 0,
-    total: 3,
-    reward: '50 XP'
-  });
-
   const { user } = useContext(AuthContext);
   const navigation = useNavigation();
-  
-  // Instância do GameDataService
-  const gameDataService = GameDataService.getInstance();
 
-  // Carregar dados de gamificação quando o usuário estiver logado
-  useEffect(() => {
-    if (user?.cpf) {
-      loadUserGameData();
-    }
-  }, [user]);
 
-  const loadUserGameData = async () => {
-    if (!user?.cpf) return;
-    
-    try {
-      console.log(`[Home] Carregando dados de gamificação para CPF: ${user.cpf}`);
-      const data = await gameDataService.loadUserGameData(user.cpf);
-      setUserGameData(data);
-      
-      // Atualizar desafio diário
-      const today = new Date().toISOString().split('T')[0];
-      const todayChallenge = data.dailyChallenges[today];
-      if (todayChallenge) {
-        setDailyChallenge(prev => ({
-          ...prev,
-          progress: todayChallenge.vibesAvaliadasHoje
-        }));
-      }
-      
-      console.log(`[Home] Dados de gamificação carregados:`, data);
-    } catch (error) {
-      console.error(`[Home] Erro ao carregar dados de gamificação:`, error);
-    }
-  };
-
-  // Função para registrar uma vibe avaliada
-  const registerVibeEvaluated = async (eventId: string, nota: number) => {
-    if (!user?.cpf || !userGameData) return;
-    
-    try {
-      console.log(`[Home] Registrando vibe avaliada: evento=${eventId}, nota=${nota}`);
-      
-      const result = await gameDataService.registerVibeEvaluated(
-        user.cpf,
-        userGameData,
-        eventId,
-        nota
-      );
-      
-      // Atualizar estado local
-      setUserGameData(result.updatedData);
-      
-      // Mostrar modal de level up se necessário
-      if (result.leveledUp) {
-        setShowLevelUp(true);
-      }
-      
-      // Atualizar desafio diário
-      if (result.challengeCompleted) {
-        setDailyChallenge(prev => ({
-          ...prev,
-          progress: prev.progress + 1
-        }));
-      }
-      
-      console.log(`[Home] Vibe registrada com sucesso. Level up: ${result.leveledUp}, Badges: ${result.unlockedBadges.join(', ')}`);
-    } catch (error) {
-      console.error(`[Home] Erro ao registrar vibe:`, error);
-    }
-  };
-
-  // Função para registrar participação em evento
-  const registerEventParticipation = async (eventId: string) => {
-    if (!user?.cpf || !userGameData) return;
-    
-    try {
-      console.log(`[Home] Registrando participação no evento: ${eventId}`);
-      
-      const result = await gameDataService.registerEventParticipation(
-        user.cpf,
-        userGameData,
-        eventId
-      );
-      
-      // Atualizar estado local
-      setUserGameData(result.updatedData);
-      
-      // Mostrar modal de level up se necessário
-      if (result.leveledUp) {
-        setShowLevelUp(true);
-      }
-      
-      console.log(`[Home] Participação registrada. Level up: ${result.leveledUp}, Badges: ${result.unlockedBadges.join(', ')}`);
-    } catch (error) {
-      console.error(`[Home] Erro ao registrar participação:`, error);
-    }
-  };
 
   useEffect(() => {
     const eventosRef = ref(database, 'eventos/');
@@ -322,25 +214,16 @@ export default function Home() {
       );
       return;
     }
-    navigation.navigate('VibeScreen' as never, {
+    navigation.navigate("VibeScreen" as never, {
       eventId: evento.id,
       nomeEvento: evento.nomeevento,
       cpf: user.cpf,
-      onVibeEvaluated: (eventId: string, nota: number) => {
-        // Callback para quando uma vibe for avaliada
-        registerVibeEvaluated(eventId, nota);
-      }
     } as never);
   }
 
   const handleOpenSalesPage = (evento: Evento) => {
     const url = `https://piauitickets.com/comprar/${evento.id}/${evento.nomeurl || ''}`;
-    Linking.openURL(url).catch(err => console.error('Erro ao abrir URL:', err));
-    
-    // Registrar participação no evento (quando o usuário clica para ver detalhes)
-    if (user?.cpf) {
-      registerEventParticipation(evento.id);
-    }
+    Linking.openURL(url).catch(err => console.error("Erro ao abrir URL:", err));
   };
 
   const getMensagemVibe = (eventoId: string): string => {
@@ -362,145 +245,9 @@ export default function Home() {
     return !!vibe && vibe.count >= 9 && vibe.media >= 4.5;
   };
 
-  // Função para obter badge icon
-  const getBadgeIcon = (badgeId: string): string => {
-    const badgeInfo = gameDataService.getBadgeInfo(badgeId);
-    return badgeInfo.icon;
-  };
 
-  // Função para obter nome amigável do badge
-  const getBadgeName = (badgeId: string): string => {
-    const badgeInfo = gameDataService.getBadgeInfo(badgeId);
-    return badgeInfo.name;
-  };
 
-  // Componente de Gamificação - Card de Status do Usuário
-  const renderUserStatsCard = () => {
-    if (!userGameData) return null;
-    
-    return (
-      <View style={styles.userStatsCard}>
-        <View style={styles.userStatsHeader}>
-          <View style={styles.userInfo}>
-            <MaterialCommunityIcons name="account-circle" size={40} color={Colors.primary.purple} />
-            <View style={styles.userDetails}>
-              <Text style={styles.userName}>{user?.nome || 'Usuário'}</Text>
-              <Text style={styles.userLevel}>Nível {userGameData.level}</Text>
-            </View>
-          </View>
-          <TouchableOpacity style={styles.streakBadge}>
-            <MaterialCommunityIcons name="fire" size={16} color={Colors.text.onPrimary} />
-            <Text style={styles.streakText}>{userGameData.streak} dias</Text>
-          </TouchableOpacity>
-        </View>
-        
-        <View style={styles.xpContainer}>
-          <View style={styles.xpBar}>
-            <View style={[styles.xpProgress, { width: `${(userGameData.xp / userGameData.xpToNext) * 100}%` }]} />
-          </View>
-          <Text style={styles.xpText}>{userGameData.xp} / {userGameData.xpToNext} XP</Text>
-        </View>
-        
-        <View style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <MaterialCommunityIcons name="calendar-check" size={20} color={Colors.primary.purple} />
-            <Text style={styles.statNumber}>{userGameData.eventosParticipados}</Text>
-            <Text style={styles.statLabel}>Eventos</Text>
-          </View>
-          <View style={styles.statItem}>
-            <MaterialCommunityIcons name="star" size={20} color={Colors.primary.magenta} />
-            <Text style={styles.statNumber}>{userGameData.vibesAvaliadas}</Text>
-            <Text style={styles.statLabel}>Vibes</Text>
-          </View>
-          <View style={styles.statItem}>
-            <MaterialCommunityIcons name="medal" size={20} color={Colors.primary.orange} />
-            <Text style={styles.statNumber}>{userGameData.badges.length}</Text>
-            <Text style={styles.statLabel}>Badges</Text>
-          </View>
-        </View>
-      </View>
-    );
-  };
 
-  // Componente de Desafio Diário
-  const renderDailyChallenge = () => (
-    <View style={styles.challengeCard}>
-      <View style={styles.challengeHeader}>
-        <MaterialCommunityIcons name="trophy" size={24} color={Colors.primary.orange} />
-        <Text style={styles.challengeTitle}>Desafio Diário</Text>
-      </View>
-      <Text style={styles.challengeDescription}>{dailyChallenge.title}</Text>
-      <View style={styles.challengeProgress}>
-        <View style={styles.progressBar}>
-          <View style={[styles.progressFill, { width: `${(dailyChallenge.progress / dailyChallenge.total) * 100}%` }]} />
-        </View>
-        <Text style={styles.progressText}>{dailyChallenge.progress}/{dailyChallenge.total}</Text>
-      </View>
-      <Text style={styles.challengeReward}>Recompensa: {dailyChallenge.reward}</Text>
-    </View>
-  );
-
-  // Componente de Badges
-  const renderBadges = () => {
-    if (!userGameData) return null;
-    
-    return (
-      <View style={styles.badgesSection}>
-        <View style={styles.sectionHeader}>
-          <MaterialCommunityIcons name="medal" size={24} color={Colors.primary.orange} />
-          <Text style={styles.sectionTitle}>Suas Conquistas</Text>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.badgesScroll}>
-          {userGameData.badges.map((badge, index) => (
-            <View key={index} style={styles.badgeItem}>
-              <View style={styles.badgeIcon}>
-                <MaterialCommunityIcons name={getBadgeIcon(badge)} size={24} color={Colors.text.onPrimary} />
-              </View>
-              <Text style={styles.badgeLabel}>{getBadgeName(badge)}</Text>
-            </View>
-          ))}
-          <TouchableOpacity style={styles.viewAllBadges}>
-            <MaterialCommunityIcons name="plus" size={24} color={Colors.text.tertiary} />
-            <Text style={styles.viewAllText}>Ver todas</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </View>
-    );
-  };
-
-  // Componente de Eventos Recomendados
-  const renderRecommendedEvents = () => {
-    const eventosRecomendados = eventos.filter(evento => 
-      mostraSeloAltaVibe(evento.id) || eventosHoje.includes(evento)
-    ).slice(0, 3);
-
-    if (eventosRecomendados.length === 0) return null;
-
-    return (
-      <View style={styles.recommendedSection}>
-        <View style={styles.sectionHeader}>
-          <MaterialCommunityIcons name="heart" size={24} color={Colors.primary.magenta} />
-          <Text style={styles.sectionTitle}>Recomendados para Hoje!</Text>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recommendedScroll}>
-          {eventosRecomendados.map((evento) => (
-            <TouchableOpacity key={evento.id} style={styles.recommendedCard} onPress={() => handleOpenSalesPage(evento)}>
-              <Image source={{ uri: evento.imageurl }} style={styles.recommendedImage} />
-              <View style={styles.recommendedContent}>
-                <Text style={styles.recommendedTitle} numberOfLines={2}>{evento.nomeevento}</Text>
-                {mostraSeloAltaVibe(evento.id) && (
-                  <View style={styles.recommendedBadge}>
-                    <MaterialCommunityIcons name="fire" size={12} color={Colors.text.onPrimary} />
-                    <Text style={styles.recommendedBadgeText}>Alta Vibe</Text>
-                  </View>
-                )}
-              </View>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-    );
-  };
 
   // Componente Story Card estilo Instagram
   const renderStoryCard = (evento: Evento, index: number) => (
@@ -663,11 +410,9 @@ export default function Home() {
           contentContainerStyle={styles.scrollViewContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Card de Status do Usuário (Gamificação) */}
-          {user && renderUserStatsCard()}
 
-          {/* Desafio Diário */}
-          {user && renderDailyChallenge()}
+
+
 
           {/* Seção de Stories (Eventos em Destaque) */}
           {eventosHoje.length > 0 && (
@@ -687,11 +432,8 @@ export default function Home() {
             </View>
           )}
 
-          {/* Eventos Recomendados */}
-          {user && renderRecommendedEvents()}
 
-          {/* Badges do Usuário */}
-          {user && renderBadges()}
+
 
           {/* Seção de Próximos Eventos */}
           <View style={styles.section}>
@@ -862,22 +604,7 @@ export default function Home() {
         </View>
       </Modal>
 
-      {/* Modal de Level Up */}
-      <Modal visible={showLevelUp} animationType="slide" transparent>
-        <View style={styles.levelUpOverlay}>
-          <View style={styles.levelUpModal}>
-            <MaterialCommunityIcons name="trophy" size={64} color={Colors.primary.orange} />
-            <Text style={styles.levelUpTitle}>Parabéns!</Text>
-            <Text style={styles.levelUpText}>Você subiu para o nível {userGameData?.level || 1}!</Text>
-            <TouchableOpacity 
-              style={styles.levelUpButton}
-              onPress={() => setShowLevelUp(false)}
-            >
-              <Text style={styles.levelUpButtonText}>Continuar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+
     </SafeAreaView>
   );
 }

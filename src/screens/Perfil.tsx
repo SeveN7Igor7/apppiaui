@@ -905,7 +905,6 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
 
-  // ==================== ESTILOS DE PERFIL ====================
   profileContainer: {
     flex: 1,
     paddingHorizontal: 20,
