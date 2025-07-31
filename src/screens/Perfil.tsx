@@ -749,6 +749,12 @@ export default function Perfil({ navigation }) {
                 color={Colors.gamification.blue}
               />
               <ProfileOption 
+                icon="account-group" 
+                text="Encontrar Amigos" 
+                onPress={() => navigation.navigate("Social")}
+                color={Colors.gamification.magenta}
+              />
+              <ProfileOption 
                 icon="image-outline" 
                 text="Editar Foto de Perfil" 
                 onPress={() => navigation.navigate('UploadImage')}
@@ -763,7 +769,7 @@ export default function Perfil({ navigation }) {
               <ProfileOption 
                 icon="settings-outline" 
                 text="Configurações" 
-                onPress={() => Alert.alert("Configurações", "Em desenvolvimento!")}
+                onPress={() => navigation.navigate("Configuracoes")}
                 color={Colors.gamification.orange}
               />
             </View>
