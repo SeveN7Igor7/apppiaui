@@ -909,57 +909,68 @@ export default function Social() {
         </View>
 
         {/* Informações do usuário */}
-        <View style={styles.profileCard}>
-          <View style={styles.profileInfo}>
-            {selectedUser.avatar ? (
-              <Image source={{ uri: selectedUser.avatar }} style={styles.profileAvatar} />
-            ) : (
-              <View style={[styles.profileAvatar, styles.avatarPlaceholder]}>
-                <Text style={styles.profileAvatarText}>
-                  {selectedUser.fullname.charAt(0).toUpperCase()}
-                </Text>
-              </View>
-            )}
-            
-            <View style={styles.profileDetails}>
-              <Text style={styles.profileName}>{selectedUser.fullname}</Text>
-              <Text style={styles.profileContact}>{selectedUser.email}</Text>
-              {selectedUser.telefone && (
-                <Text style={styles.profileContact}>{selectedUser.telefone}</Text>
-              )}
-              {selectedUser.datanascimento && (
-                <Text style={styles.profileBirth}>
-                  Nascimento: {new Date(selectedUser.datanascimento).toLocaleDateString('pt-BR')}
-                </Text>
-              )}
-              {selectedUser.gender && (
-                <Text style={styles.profileGender}>{selectedUser.gender}</Text>
-              )}
-              {selectedUser.friendCount !== undefined && (
-                <Text style={styles.profileFriendCount}>
-                  {selectedUser.friendCount} amigo{selectedUser.friendCount !== 1 ? 's' : ''}
-                </Text>
-              )}
+<View style={styles.profileCard}>
+  <View style={styles.profileInfo}>
+    {selectedUser.avatar ? (
+      <Image source={{ uri: selectedUser.avatar }} style={styles.profileAvatar} />
+    ) : (
+      <View style={[styles.profileAvatar, styles.avatarPlaceholder]}>
+        <Text style={styles.profileAvatarText}>
+          {selectedUser.fullname.charAt(0).toUpperCase()}
+        </Text>
+      </View>
+    )}
 
-              {user && user.cpf !== selectedUser.cpf && !isFriend && (
-                <TouchableOpacity 
-                  style={styles.addFriendButtonLarge}
-                  onPress={() => handleAddFriend(selectedUser.cpf)}
-                >
-                  <MaterialCommunityIcons name="account-plus" size={20} color="#fff" />
-                  <Text style={styles.addFriendButtonText}>Adicionar Amigo</Text>
-                </TouchableOpacity>
-              )}
+    <View style={styles.profileDetails}>
+      <Text style={styles.profileName}>{selectedUser.fullname}</Text>
+      <Text style={styles.profileContact}>{selectedUser.email}</Text>
 
-              {user && user.cpf !== selectedUser.cpf && isFriend && (
-                <View style={styles.alreadyFriendContainer}>
-                  <MaterialCommunityIcons name="account-check" size={20} color={Colors.success} />
-                  <Text style={styles.alreadyFriendText}>Vocês já são amigos!</Text>
-                </View>
-              )}
-            </View>
-          </View>
+      {/* Comentado: Número de telefone */}
+      {/*
+      {selectedUser.telefone && (
+        <Text style={styles.profileContact}>{selectedUser.telefone}</Text>
+      )}
+      */}
+
+      {/* Comentado: Data de nascimento */}
+      {/*
+      {selectedUser.datanascimento && (
+        <Text style={styles.profileBirth}>
+          Nascimento: {new Date(selectedUser.datanascimento).toLocaleDateString('pt-BR')}
+        </Text>
+      )}
+      */}
+
+      {selectedUser.gender && (
+        <Text style={styles.profileGender}>{selectedUser.gender}</Text>
+      )}
+
+      {selectedUser.friendCount !== undefined && (
+        <Text style={styles.profileFriendCount}>
+          {selectedUser.friendCount} amigo{selectedUser.friendCount !== 1 ? 's' : ''}
+        </Text>
+      )}
+
+      {user && user.cpf !== selectedUser.cpf && !isFriend && (
+        <TouchableOpacity 
+          style={styles.addFriendButtonLarge}
+          onPress={() => handleAddFriend(selectedUser.cpf)}
+        >
+          <MaterialCommunityIcons name="account-plus" size={20} color="#fff" />
+          <Text style={styles.addFriendButtonText}>Adicionar Amigo</Text>
+        </TouchableOpacity>
+      )}
+
+      {user && user.cpf !== selectedUser.cpf && isFriend && (
+        <View style={styles.alreadyFriendContainer}>
+          <MaterialCommunityIcons name="account-check" size={20} color={Colors.success} />
+          <Text style={styles.alreadyFriendText}>Vocês já são amigos!</Text>
         </View>
+      )}
+    </View>
+  </View>
+</View>
+
 
         {/* Eventos participados */}
         <View style={styles.eventsSection}>
@@ -1550,7 +1561,7 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginTop: 2,
   },
-  friendsLoadingContainer: {
+  friendsLoadingContainer: { 
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
