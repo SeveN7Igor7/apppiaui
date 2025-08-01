@@ -71,6 +71,16 @@ export default function Home() {
     console.log('[BottomSheet] handleSheetChanges:', index);
   }, []);
 
+  // Função para navegar para a tela de Ingressos
+  const handleNavigateToIngressos = () => {
+    navigation.navigate('Ingressos' as never);
+  };
+
+  // Função para navegar para a tela de Perfil
+  const handleNavigateToPerfil = () => {
+    navigation.navigate('Perfil' as never);
+  };
+
   useEffect(() => {
     console.log('[Firebase] Tentando carregar eventos...');
     const eventosRef = ref(database, 'eventos/');
@@ -491,13 +501,15 @@ export default function Home() {
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top }]}>
         <View style={styles.headerContent}>
-          <MaterialCommunityIcons name="ticket" size={24} color={Colors.text.onPrimary} />
+          <TouchableOpacity onPress={handleNavigateToIngressos}>
+            <MaterialCommunityIcons name="ticket" size={24} color={Colors.text.onPrimary} />
+          </TouchableOpacity>
           <Image 
             source={require('../images/logo.png')} 
             style={styles.headerLogo}
             resizeMode="contain"
           />
-          <TouchableOpacity style={styles.profileButton}>
+          <TouchableOpacity style={styles.profileButton} onPress={handleNavigateToPerfil}>
             <MaterialCommunityIcons name="account-circle" size={24} color={Colors.text.onPrimary} />
           </TouchableOpacity>
         </View>
