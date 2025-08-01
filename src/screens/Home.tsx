@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext } from 'react';
+import React, { useEffect, useState, useContext, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,11 +8,11 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   ScrollView,
-  Modal,
   Dimensions,
   Linking,
   Alert,
   StatusBar,
+  StyleSheet,
 } from 'react-native';
 import { ref, onValue, get } from 'firebase/database';
 import { database } from '../services/firebase';
@@ -24,10 +24,10 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import { Typography } from '../constants/Typography';
 import { Spacing } from '../constants/Spacing';
-import { Animated, Easing } from 'react-native';
-
-// Importação dos estilos separados
-import { styles } from '../constants/HomeStyle';
+import { Video } from 'expo-av';
+import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as FileSystem from 'expo-file-system';
 
 const { width, height } = Dimensions.get('window');
 
@@ -47,19 +47,32 @@ type VibeData = {
   count: number;
 };
 
+type VideoUrl = {
+  id: string;
+  url: string;
+  localUri?: string; // Adicionado para armazenar o URI local do vídeo
+};
+
 export default function Home() {
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [loading, setLoading] = useState(true);
-  const [storyAberto, setStoryAberto] = useState<Evento | null>(null);
   const [vibes, setVibes] = useState<Record<string, VibeData>>({});
-  const [visualizacaoCompleta, setVisualizacaoCompleta] = useState(false);
-  
+  const [videoUrls, setVideoUrls] = useState<VideoUrl[]>([]);
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+  const [videoLoading, setVideoLoading] = useState(true); // Novo estado para controlar o carregamento do vídeo
+
   const { user } = useContext(AuthContext);
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
 
+  const bottomSheetRef = useRef<BottomSheet>(null);
 
+  const handleSheetChanges = useCallback((index: number) => {
+    console.log('[BottomSheet] handleSheetChanges:', index);
+  }, []);
 
   useEffect(() => {
+    console.log('[Firebase] Tentando carregar eventos...');
     const eventosRef = ref(database, 'eventos/');
     const unsubscribe = onValue(eventosRef, (snapshot) => {
       const data = snapshot.val();
@@ -69,7 +82,6 @@ export default function Home() {
         Object.keys(data).forEach((id) => {
           const evento = data[id];
           if (evento.eventvisible) {
-            console.log(`[Home] Evento carregado: ID=${id}, nome=${evento.nomeevento}`);
             lista.push({
               id,
               nomeevento: evento.nomeevento || 'Sem nome',
@@ -86,21 +98,111 @@ export default function Home() {
 
       setEventos(lista);
       setLoading(false);
+      console.log('[Firebase] Eventos carregados com sucesso:', lista.length);
+    }, (error) => {
+      console.error('[Firebase] Erro ao carregar eventos do Firebase:', error);
+      setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
+  // Lógica para buscar URLs de vídeo do Firebase e fazer cache
+  useEffect(() => {
+    const VIDEO_CACHE_DIR = FileSystem.cacheDirectory + 'videos/';
+
+    const ensureDirExists = async () => {
+      console.log('[Cache] Verificando diretório de cache:', VIDEO_CACHE_DIR);
+      const dirInfo = await FileSystem.getInfoAsync(VIDEO_CACHE_DIR);
+      if (!dirInfo.exists) {
+        console.log('[Cache] Criando diretório de cache de vídeo...');
+        await FileSystem.makeDirectoryAsync(VIDEO_CACHE_DIR, { intermediates: true });
+        console.log('[Cache] Diretório de cache criado.');
+      }
+    };
+
+    const getCachedVideoUri = async (url: string) => {
+      const filename = url.split('/').pop();
+      if (!filename) {
+        console.warn('[Cache] Não foi possível extrair o nome do arquivo da URL:', url);
+        return null;
+      }
+      const localUri = VIDEO_CACHE_DIR + filename;
+
+      const fileInfo = await FileSystem.getInfoAsync(localUri);
+      if (fileInfo.exists) {
+        console.log('[Cache] Vídeo já em cache:', localUri);
+        return localUri;
+      }
+
+      console.log('[Cache] Baixando vídeo:', url, 'para', localUri);
+      try {
+        const { uri } = await FileSystem.downloadAsync(url, localUri);
+        console.log('[Cache] Vídeo baixado com sucesso para:', uri);
+        return uri;
+      } catch (error) {
+        console.error('[Cache] Erro ao baixar vídeo:', url, error);
+        return null;
+      }
+    };
+
+    const fetchAndCacheVideoUrls = async () => {
+      console.log('[Video] Iniciando busca e cache de URLs de vídeo...');
+      setVideoLoading(true); // Inicia o loader do vídeo
+      await ensureDirExists();
+      try {
+        const conteudosMenuRef = ref(databaseSocial, 'configgeralapp/conteudosmenu/');
+        const snapshot = await get(conteudosMenuRef);
+        const data = snapshot.val();
+
+        if (data) {
+          const fetchedUrls: VideoUrl[] = [];
+          console.log('[Video] Dados brutos de URLs de eventos encontrados no Firebase:', JSON.stringify(data, null, 2));
+          for (const eventId in data) {
+            const eventContent = data[eventId];
+            // A estrutura de dados indica que o conteúdo é um array onde a URL está no índice 1
+            if (Array.isArray(eventContent) && eventContent.length > 1 && typeof eventContent[1] === 'string') {
+              const remoteUrl = eventContent[1];
+              console.log(`[Video] Processando URL: ${remoteUrl} para o evento ${eventId}`);
+              const localUri = await getCachedVideoUri(remoteUrl);
+              if (localUri) {
+                fetchedUrls.push({ id: eventId, url: remoteUrl, localUri });
+              } else {
+                fetchedUrls.push({ id: eventId, url: remoteUrl }); // Adiciona mesmo sem cache se houver erro no download
+              }
+            } else {
+              console.warn(`[Video] Conteúdo inesperado para o evento ${eventId}:`, eventContent);
+            }
+          }
+          console.log('[Video] URLs de vídeo processadas (com ou sem cache):', fetchedUrls);
+          setVideoUrls(fetchedUrls);
+        } else {
+          console.log('[Video] Nenhuma URL de vídeo encontrada no Firebase.');
+        }
+      } catch (error) {
+        console.error('[Firebase] Erro ao buscar URLs de vídeo do Firebase:', error);
+      } finally {
+        setVideoLoading(false); // Finaliza o loader do vídeo
+      }
+    };
+
+    fetchAndCacheVideoUrls();
+  }, []);
+
+  // Função para avançar para o próximo vídeo
+  const handleVideoPlaybackStatusUpdate = (status: any) => {
+    if (status.didJustFinish) {
+      console.log('[Video] Vídeo atual terminou. Avançando para o próximo.');
+      setCurrentVideoIndex((prevIndex) => (prevIndex + 1) % videoUrls.length);
+    }
+  };
+
   // Função que calcula média considerando só avaliações da última 1 hora
   async function calcularMediaVibe(eventId: string): Promise<VibeData | null> {
     try {
-      console.log(`[Home] Iniciando cálculo da vibe para evento: ${eventId}`);
-
       const snapshot = await get(ref(databaseSocial, `avaliacoesVibe/${eventId}/`));
-      console.log(`[Home] Snapshot da vibe para evento ${eventId}:`, snapshot.exists(), snapshot.val());
-
       if (!snapshot.exists()) {
-        console.log(`[Home] Nenhuma avaliação encontrada para o evento ${eventId}.`);
+        console.log(`[Vibe] Nenhuma avaliação encontrada para o evento ${eventId}.`);
         return null;
       }
 
@@ -108,26 +210,25 @@ export default function Home() {
       const agora = Date.now();
       const umaHoraMs = 60 * 60 * 1000;
 
-      // Filtrar só avaliações feitas na última 1 hora
       const avaliacoesRecentes = Object.values(data).filter((item: any) => {
         if (!item.timestamp) return false;
         const diff = agora - item.timestamp;
         return diff >= 0 && diff <= umaHoraMs;
       }) as { nota: number; timestamp: number }[];
 
-      console.log(`[Home] Avaliações recentes (última 1h) para evento ${eventId}:`, avaliacoesRecentes.length, avaliacoesRecentes);
-
-      if (avaliacoesRecentes.length === 0) return null;
+      if (avaliacoesRecentes.length === 0) {
+        console.log(`[Vibe] Nenhuma avaliação recente para o evento ${eventId}.`);
+        return null;
+      }
 
       const totalNotas = avaliacoesRecentes.reduce((acc, cur) => acc + cur.nota, 0);
       const quantidade = avaliacoesRecentes.length;
       const media = totalNotas / quantidade;
 
-      console.log(`[Home] Média atualizada para evento ${eventId}: ${media} com ${quantidade} avaliações.`);
-
+      console.log(`[Vibe] Média calculada para o evento ${eventId}: ${media} com ${quantidade} avaliações.`);
       return { media, count: quantidade };
     } catch (error) {
-      console.error(`[Home] Erro ao calcular vibe do evento ${eventId}:`, error);
+      console.error(`[Vibe] Erro ao calcular vibe do evento ${eventId}:`, error);
       return null;
     }
   }
@@ -136,6 +237,7 @@ export default function Home() {
     if (eventos.length === 0) return;
 
     async function carregarVibes() {
+      console.log('[Vibe] Carregando vibes para eventos...');
       const vibesArray = await Promise.all(
         eventos.map(async (evento) => {
           const vibe = await calcularMediaVibe(evento.id);
@@ -151,12 +253,13 @@ export default function Home() {
       });
 
       setVibes(vibesMap);
+      console.log('[Vibe] Vibes carregadas:', vibesMap);
     }
 
     carregarVibes();
 
-    // Atualizar vibes a cada 5 minutos
     const intervalo = setInterval(() => {
+      console.log('[Vibe] Atualizando vibes...');
       carregarVibes();
     }, 5 * 60 * 1000);
 
@@ -179,7 +282,8 @@ export default function Home() {
       if (diffMin < 60) return `Faltam ${diffMin} min`;
       if (diffHoras <= 5) return `Faltam ${diffHoras} horas`;
       return '';
-    } catch {
+    } catch (e) {
+      console.error('[Urgencia] Erro ao calcular mensagem de urgência:', e);
       return '';
     }
   };
@@ -194,7 +298,8 @@ export default function Home() {
         hoje.getMonth() + 1 === mes &&
         hoje.getFullYear() === ano
       );
-    } catch {
+    } catch (e) {
+      console.error('[EventosHoje] Erro ao filtrar eventos de hoje:', e);
       return false;
     }
   });
@@ -223,7 +328,7 @@ export default function Home() {
 
   const handleOpenSalesPage = (evento: Evento) => {
     const url = `https://piauitickets.com/comprar/${evento.id}/${evento.nomeurl || ''}`;
-    Linking.openURL(url).catch(err => console.error("Erro ao abrir URL:", err));
+    Linking.openURL(url).catch(err => console.error('Erro ao abrir URL de vendas:', err));
   };
 
   const getMensagemVibe = (eventoId: string): string => {
@@ -244,43 +349,6 @@ export default function Home() {
     const vibe = vibes[eventoId];
     return !!vibe && vibe.count >= 9 && vibe.media >= 4.5;
   };
-
-
-
-
-
-  // Componente Story Card estilo Instagram
-  const renderStoryCard = (evento: Evento, index: number) => (
-    <TouchableOpacity
-      key={evento.id}
-      style={[styles.storyCard, { marginLeft: index === 0 ? 0 : 12 }]}
-      onPress={() => setStoryAberto(evento)}
-      activeOpacity={0.8}
-    >
-      <View style={styles.storyImageContainer}>
-        <Image source={{ uri: evento.imageurl }} style={styles.storyImage} />
-        
-        {/* Borda gradiente estilo Instagram */}
-        <LinearGradient
-          colors={['#FF006E', '#FB5607', '#FF006E']}
-          style={styles.storyBorder}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        />
-        
-        {/* Badge de alta vibe */}
-        {mostraSeloAltaVibe(evento.id) && (
-          <View style={styles.storyVibeBadge}>
-            <MaterialCommunityIcons name="fire" size={12} color={Colors.text.onPrimary} />
-          </View>
-        )}
-      </View>
-      
-      <Text style={styles.storyTitle} numberOfLines={2}>
-        {evento.nomeevento}
-      </Text>
-    </TouchableOpacity>
-  );
 
   const renderEventCard = (evento: Evento) => {
     const encerrado = !evento.vendaaberta?.vendaaberta;
@@ -381,11 +449,47 @@ export default function Home() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.neutral.black} />
-      
-      {/* Header com fundo preto */}
-      <View style={styles.header}>
+    <View style={styles.fullScreenContainer}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+
+      {/* Video Background */}
+      {videoUrls.length > 0 && (
+        <Video
+          source={{ uri: videoUrls[currentVideoIndex].localUri || videoUrls[currentVideoIndex].url }}
+          style={styles.videoBackground}
+          shouldPlay
+          isLooping
+          isMuted
+          resizeMode="cover"
+          onPlaybackStatusUpdate={handleVideoPlaybackStatusUpdate}
+          onLoadStart={() => {
+            console.log('[Video] Início do carregamento do vídeo.');
+            setVideoLoading(true);
+          }} // Inicia o loader quando o vídeo começa a carregar
+          onLoad={() => {
+            console.log('[Video] Vídeo carregado com sucesso.');
+            setVideoLoading(false);
+          }} // Desativa o loader quando o vídeo é carregado
+          onError={(error) => {
+            console.error('[Video] Erro ao carregar vídeo:', error);
+            setVideoLoading(false); // Desativa o loader em caso de erro
+          }}
+        />
+      )}
+      {videoUrls.length === 0 && (
+        <View style={styles.fallbackBackground} />
+      )}
+
+      {/* Loader para o vídeo */}
+      {videoLoading && (
+        <View style={styles.videoLoaderOverlay}>
+          <ActivityIndicator size="large" color={Colors.primary.purple} />
+          <Text style={styles.loadingText}>Carregando vídeo...</Text>
+        </View>
+      )}
+
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: insets.top }]}>
         <View style={styles.headerContent}>
           <MaterialCommunityIcons name="ticket" size={24} color={Colors.text.onPrimary} />
           <Image 
@@ -405,206 +509,329 @@ export default function Home() {
           <Text style={styles.loadingText}>Carregando eventos...</Text>
         </View>
       ) : (
-        <ScrollView 
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollViewContent}
-          showsVerticalScrollIndicator={false}
+        <BottomSheet
+          ref={bottomSheetRef}
+          index={0}
+          snapPoints={['25%', '50%', '90%']}
+          onChange={handleSheetChanges}
+          backgroundStyle={styles.bottomSheetBackground}
+          handleIndicatorStyle={styles.bottomSheetHandle}
         >
-
-
-
-
-          {/* Seção de Stories (Eventos em Destaque) */}
-          {eventosHoje.length > 0 && (
+          <BottomSheetScrollView contentContainerStyle={styles.bottomSheetContent}>
+            {/* Seção de Próximos Eventos */}
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <MaterialCommunityIcons name="fire" size={24} color={Colors.primary.magenta} />
-                <Text style={styles.sectionTitle}>Em Destaque</Text>
+                <MaterialCommunityIcons name="calendar" size={24} color={Colors.primary.purple} />
+                <Text style={styles.sectionTitle}>Próximos Eventos</Text>
               </View>
               
-              <ScrollView 
-                horizontal 
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.storiesScrollContent}
-              >
-                {eventosHoje.map(renderStoryCard)}
-              </ScrollView>
-            </View>
-          )}
-
-
-
-
-          {/* Seção de Próximos Eventos */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <MaterialCommunityIcons name="calendar" size={24} color={Colors.primary.purple} />
-              <Text style={styles.sectionTitle}>Próximos Eventos</Text>
-            </View>
-            
-            <View style={styles.eventsGrid}>
-              {eventosParaLista.map(renderEventCard)}
-            </View>
-          </View>
-
-          {/* Seção de Descoberta */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <MaterialCommunityIcons name="compass" size={24} color={Colors.primary.orange} />
-              <Text style={styles.sectionTitle}>Descubra Novos Eventos</Text>
-            </View>
-            
-            <View style={styles.discoveryContainer}>
-              <MaterialCommunityIcons name="map-search" size={48} color={Colors.text.tertiary} />
-              <Text style={styles.discoveryText}>Explore eventos por categoria</Text>
-              <Text style={styles.discoverySubtext}>Encontre shows, festas e experiências únicas.</Text>
-              
-              <View style={styles.categoryButtons}>
-                <TouchableOpacity style={styles.categoryButton}>
-                  <MaterialCommunityIcons name="music" size={20} color={Colors.primary.purple} />
-                  <Text style={styles.categoryButtonText}>Shows</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.categoryButton}>
-                  <MaterialCommunityIcons name="party-popper" size={20} color={Colors.primary.magenta} />
-                  <Text style={styles.categoryButtonText}>Festas</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.categoryButton}>
-                  <MaterialCommunityIcons name="theater" size={20} color={Colors.primary.orange} />
-                  <Text style={styles.categoryButtonText}>Teatro</Text>
-                </TouchableOpacity>
+              <View style={styles.eventsGrid}>
+                {eventosParaLista.map(renderEventCard)}
               </View>
             </View>
-          </View>
-        </ScrollView>
+
+            {/* Seção de Descoberta */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <MaterialCommunityIcons name="compass" size={24} color={Colors.primary.orange} />
+                <Text style={styles.sectionTitle}>Descubra Novos Eventos</Text>
+              </View>
+              
+              <View style={styles.discoveryContainer}>
+                <MaterialCommunityIcons name="map-search" size={48} color={Colors.text.tertiary} />
+                <Text style={styles.discoveryText}>Explore eventos por categoria</Text>
+                <Text style={styles.discoverySubtext}>Encontre shows, festas e experiências únicas.</Text>
+                
+                <View style={styles.categoryButtons}>
+                  <TouchableOpacity style={styles.categoryButton}>
+                    <MaterialCommunityIcons name="music" size={20} color={Colors.primary.purple} />
+                    <Text style={styles.categoryButtonText}>Shows</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.categoryButton}>
+                    <MaterialCommunityIcons name="party-popper" size={20} color={Colors.primary.magenta} />
+                    <Text style={styles.categoryButtonText}>Festas</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.categoryButton}>
+                    <MaterialCommunityIcons name="food" size={20} color={Colors.primary.orange} />
+                    <Text style={styles.categoryButtonText}>Gastronomia</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.categoryButton}>
+                    <MaterialCommunityIcons name="theater" size={20} color={Colors.primary.blue} />
+                    <Text style={styles.categoryButtonText}>Teatro</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.categoryButton}>
+                    <MaterialCommunityIcons name="palette" size={20} color={Colors.primary.green} />
+                    <Text style={styles.categoryButtonText}>Arte</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.categoryButton}>
+                    <MaterialCommunityIcons name="run" size={20} color={Colors.primary.red} />
+                    <Text style={styles.categoryButtonText}>Esportes</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </BottomSheetScrollView>
+        </BottomSheet>
       )}
-
-      {/* Modal de Story estilo Instagram */}
-      <Modal visible={!!storyAberto} animationType="fade" transparent>
-        <View style={styles.storyModalOverlay}>
-          {storyAberto && (
-            <>
-              {/* Imagem de fundo */}
-              <Image source={{ uri: storyAberto.imageurl }} style={styles.storyModalBackground} />
-              
-              {/* Overlay escuro - oculto na visualização completa */}
-              {!visualizacaoCompleta && (
-                <View style={styles.storyModalDarkOverlay} />
-              )}
-              
-              {/* Header do story - oculto na visualização completa */}
-              {!visualizacaoCompleta && (
-                <View style={styles.storyModalHeader}>
-                  <View style={styles.storyModalProgress}>
-                    <View style={styles.storyProgressBar} />
-                  </View>
-                  
-                  <View style={styles.storyModalHeaderContent}>
-                    <View style={styles.storyModalEventInfo}>
-                      <Text style={styles.storyModalEventName}>{storyAberto.nomeevento}</Text>
-                      {storyAberto.datainicio && (
-                        <Text style={styles.storyModalEventDate}>{storyAberto.datainicio}</Text>
-                      )}
-                    </View>
-                    
-                    <TouchableOpacity 
-                      onPress={() => {
-                        setStoryAberto(null);
-                        setVisualizacaoCompleta(false);
-                      }} 
-                      style={styles.storyModalCloseButton}
-                      activeOpacity={0.8}
-                    >
-                      <MaterialCommunityIcons name="close" size={24} color={Colors.story.text} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-              
-              {/* Conteúdo central - oculto na visualização completa */}
-              {!visualizacaoCompleta && (
-                <View style={styles.storyModalContent}>
-                  {getUrgenciaMensagem(storyAberto) && (
-                    <View style={styles.storyUrgencyBadge}>
-                      <MaterialCommunityIcons name="clock-fast" size={20} color={Colors.story.text} />
-                      <Text style={styles.storyUrgencyText}>{getUrgenciaMensagem(storyAberto)}</Text>
-                    </View>
-                  )}
-                  
-                  <Text style={styles.storyVibeMessage}>{getMensagemVibe(storyAberto.id)}</Text>
-                  
-                  {/* Botão Ver Conteúdo Inteiro */}
-                  <TouchableOpacity
-                    style={styles.verConteudoButton}
-                    onPress={() => setVisualizacaoCompleta(true)}
-                    activeOpacity={0.8}
-                  >
-                    <MaterialCommunityIcons name="fullscreen" size={16} color={Colors.story.text} />
-                    <Text style={styles.verConteudoButtonText}>Ver conteúdo inteiro</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-              
-              {/* Botão de voltar - visível apenas na visualização completa */}
-              {visualizacaoCompleta && (
-                <TouchableOpacity
-                  style={styles.voltarButton}
-                  onPress={() => setVisualizacaoCompleta(false)}
-                  activeOpacity={0.8}
-                >
-                  <MaterialCommunityIcons name="arrow-left" size={20} color={Colors.story.text} />
-                </TouchableOpacity>
-              )}
-              
-              {/* Botões de ação na parte inferior - ocultos na visualização completa */}
-              {!visualizacaoCompleta && (
-                <View style={styles.storyModalActions}>
-                  <TouchableOpacity
-                    style={styles.storyActionButton}
-                    onPress={() => {
-                      setStoryAberto(null);
-                      setVisualizacaoCompleta(false);
-                      handleAvaliarVibe(storyAberto);
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <LinearGradient
-                      colors={Colors.gradients.primaryMagenta}
-                      style={styles.storyActionButtonGradient}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                    >
-                      <MaterialCommunityIcons name="star-outline" size={20} color={Colors.story.text} />
-                      <Text style={styles.storyActionButtonText}>Avaliar Vibe</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.storyPrimaryButton}
-                    onPress={() =>
-                      Linking.openURL(
-                        `https://piauitickets.com/comprar/${storyAberto.id}/${storyAberto.nomeurl || ''}`
-                      )
-                    }
-                    activeOpacity={0.8}
-                  >
-                    <LinearGradient
-                      colors={Colors.gradients.primaryPurple}
-                      style={styles.storyActionButtonGradient}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                    >
-                      <MaterialCommunityIcons name="ticket" size={20} color={Colors.story.text} />
-                      <Text style={styles.storyActionButtonText}>Garanta seu ingresso</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </>
-          )}
-        </View>
-      </Modal>
-
-
-    </SafeAreaView>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  fullScreenContainer: {
+    flex: 1,
+    backgroundColor: Colors.neutral.black,
+  },
+  videoBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    right: 0,
+    width: width,
+    height: height,
+  },
+  fallbackBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    right: 0,
+    backgroundColor: Colors.neutral.black,
+  },
+  videoLoaderOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.7)', // Um overlay semi-transparente para o loader
+    zIndex: 5, // Garante que o loader fique acima do vídeo
+  },
+  header: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)', // Semi-transparente para ver o vídeo
+    paddingHorizontal: Spacing.container.horizontal,
+    paddingBottom: Spacing.md,
+    zIndex: 10,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 56, // Altura padrão do cabeçalho
+  },
+  headerLogo: {
+    height: 32,
+    flex: 1,
+    marginHorizontal: Spacing.md,
+  },
+  profileButton: {
+    padding: Spacing.xs,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+  },
+  loadingText: {
+    ...Typography.styles.bodyLarge,
+    color: Colors.text.onPrimary,
+    marginTop: Spacing.md,
+  },
+  bottomSheetBackground: {
+    backgroundColor: Colors.neutral.white,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  bottomSheetHandle: {
+    backgroundColor: Colors.neutral.lightGray,
+    width: 40,
+    height: 5,
+    borderRadius: 2.5,
+  },
+  bottomSheetContent: {
+    paddingBottom: Spacing.xxxxl,
+  },
+  section: {
+    marginTop: Spacing.section.marginTop,
+    paddingHorizontal: Spacing.container.horizontal,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  sectionTitle: {
+    ...Typography.styles.h2,
+    color: Colors.text.primary,
+    marginLeft: Spacing.sm,
+  },
+  eventsGrid: {
+    gap: Spacing.lg,
+  },
+  eventCard: {
+    backgroundColor: Colors.neutral.white,
+    borderRadius: Spacing.card.borderRadius,
+    elevation: Spacing.elevation.medium,
+    shadowColor: Colors.shadow.medium,
+    shadowOffset: Spacing.shadowOffset.small,
+    shadowOpacity: 0.15,
+    shadowRadius: Spacing.shadowRadius.small,
+    overflow: 'hidden',
+  },
+  eventImageContainer: {
+    position: 'relative',
+    height: 180,
+  },
+  eventImage: {
+    width: '100%',
+    height: '100%',
+  },
+  eventImageDisabled: {
+    opacity: 0.5,
+  },
+  eventDisabledOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: Colors.overlay.modal,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  eventDisabledText: {
+    ...Typography.styles.bodyMedium,
+    color: Colors.text.onPrimary,
+    marginTop: Spacing.xs,
+    fontWeight: Typography.fontWeight.semiBold,
+  },
+  eventHighVibeBadge: {
+    position: 'absolute',
+    top: Spacing.md,
+    right: Spacing.md,
+    backgroundColor: Colors.primary.magenta,
+    borderRadius: 10,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  eventHighVibeBadgeText: {
+    ...Typography.styles.caption,
+    color: Colors.text.onPrimary,
+    marginLeft: Spacing.xs,
+    fontWeight: Typography.fontWeight.semiBold,
+  },
+  eventCardContent: {
+    padding: Spacing.card.padding,
+  },
+  eventName: {
+    ...Typography.styles.h3,
+    color: Colors.text.primary,
+    marginBottom: Spacing.sm,
+  },
+  eventInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.xs,
+  },
+  eventInfoText: {
+    ...Typography.styles.bodyMedium,
+    color: Colors.text.secondary,
+    marginLeft: Spacing.xs,
+  },
+  vibeMessage: {
+    ...Typography.styles.bodySmall,
+    color: Colors.text.tertiary,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  vibeButtonSmall: {
+    borderRadius: 15,
+    overflow: 'hidden',
+    alignSelf: 'flex-start',
+    marginBottom: Spacing.md,
+  },
+  vibeButtonSmallGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  vibeButtonSmallText: {
+    ...Typography.styles.buttonSmall,
+    color: Colors.text.onPrimary,
+    marginLeft: Spacing.xs,
+  },
+  actionButton: {
+    borderRadius: Spacing.button.borderRadius,
+    overflow: 'hidden',
+  },
+  actionButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.button.paddingHorizontal,
+    paddingVertical: Spacing.button.paddingVertical,
+  },
+  actionButtonText: {
+    ...Typography.styles.button,
+    color: Colors.text.onPrimary,
+    marginLeft: Spacing.xs,
+  },
+  discoveryContainer: {
+    alignItems: 'center',
+    paddingVertical: Spacing.xxxl,
+  },
+  discoveryText: {
+    ...Typography.styles.bodyLarge,
+    color: Colors.text.secondary,
+    marginTop: Spacing.lg,
+    textAlign: 'center',
+  },
+  discoverySubtext: {
+    ...Typography.styles.bodyMedium,
+    color: Colors.text.tertiary,
+    marginTop: Spacing.xs,
+    textAlign: 'center',
+    marginBottom: Spacing.xl,
+  },
+  categoryButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: Spacing.md,
+  },
+  categoryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.neutral.white,
+    borderRadius: 20,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    elevation: Spacing.elevation.small,
+    shadowColor: Colors.shadow.light,
+    shadowOffset: Spacing.shadowOffset.small,
+    shadowOpacity: 0.1,
+    shadowRadius: Spacing.shadowRadius.small,
+    borderWidth: 1,
+    borderColor: Colors.neutral.lightGray,
+  },
+  categoryButtonText: {
+    ...Typography.styles.bodyMedium,
+    color: Colors.text.primary,
+    marginLeft: Spacing.xs,
+    fontWeight: Typography.fontWeight.semiBold,
+  },
+});
+
+

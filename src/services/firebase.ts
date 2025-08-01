@@ -29,10 +29,16 @@ const firebaseConfig = {
 };
 
 // Inicializa o app Firebase apenas se ainda não existir uma instância
-const app = getApps().length === 0
-  ? initializeApp(firebaseConfig)
-  : getApps()[0];
+let app;
+if (getApps().length === 0) {
+  app = initializeApp(firebaseConfig);
+  console.log('[Firebase] App principal inicializado.');
+} else {
+  app = getApps()[0];
+  console.log('[Firebase] Usando instância existente do App principal.');
+}
 
 // Exporta os serviços que vamos usar
 export const database = getDatabase(app);
 export const storage = getStorage(app);
+console.log('[Firebase] Database e Storage do app principal exportados.');
