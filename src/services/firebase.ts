@@ -28,6 +28,7 @@ const firebaseConfig = {
   appId: "1:690254869200:web:797f8d96a154e419fc24d5"
 };
 
+
 // Inicializa o app Firebase apenas se ainda não existir uma instância
 let app;
 if (getApps().length === 0) {

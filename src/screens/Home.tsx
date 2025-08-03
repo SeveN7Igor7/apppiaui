@@ -50,7 +50,7 @@ type VibeData = {
 type VideoUrl = {
   id: string;
   url: string;
-  localUri?: string; // Adicionado para armazenar o URI local do vídeo
+  localUri?: string;
 };
 
 export default function Home() {
@@ -59,13 +59,15 @@ export default function Home() {
   const [vibes, setVibes] = useState<Record<string, VibeData>>({});
   const [videoUrls, setVideoUrls] = useState<VideoUrl[]>([]);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
-  const [videoLoading, setVideoLoading] = useState(true); // Novo estado para controlar o carregamento do vídeo
 
   const { user } = useContext(AuthContext);
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
 
   const bottomSheetRef = useRef<BottomSheet>(null);
+
+  // Diretório onde os vídeos estão armazenados (mesmo do App.tsx)
+  const VIDEO_STORAGE_DIR = FileSystem.documentDirectory + 'app_videos/';
 
   const handleSheetChanges = useCallback((index: number) => {
     console.log('[BottomSheet] handleSheetChanges:', index);
@@ -117,49 +119,28 @@ export default function Home() {
     return () => unsubscribe();
   }, []);
 
-  // Lógica para buscar URLs de vídeo do Firebase e fazer cache
+  // Lógica para buscar URLs de vídeo do Firebase e usar vídeos locais
   useEffect(() => {
-    const VIDEO_CACHE_DIR = FileSystem.cacheDirectory + 'videos/';
-
-    const ensureDirExists = async () => {
-      console.log('[Cache] Verificando diretório de cache:', VIDEO_CACHE_DIR);
-      const dirInfo = await FileSystem.getInfoAsync(VIDEO_CACHE_DIR);
-      if (!dirInfo.exists) {
-        console.log('[Cache] Criando diretório de cache de vídeo...');
-        await FileSystem.makeDirectoryAsync(VIDEO_CACHE_DIR, { intermediates: true });
-        console.log('[Cache] Diretório de cache criado.');
-      }
-    };
-
-    const getCachedVideoUri = async (url: string) => {
+    const getLocalVideoUri = async (url: string): Promise<string | null> => {
       const filename = url.split('/').pop();
       if (!filename) {
-        console.warn('[Cache] Não foi possível extrair o nome do arquivo da URL:', url);
+        console.warn('[VideoLocal] Não foi possível extrair o nome do arquivo da URL:', url);
         return null;
       }
-      const localUri = VIDEO_CACHE_DIR + filename;
+      const localPath = VIDEO_STORAGE_DIR + filename;
 
-      const fileInfo = await FileSystem.getInfoAsync(localUri);
+      const fileInfo = await FileSystem.getInfoAsync(localPath);
       if (fileInfo.exists) {
-        console.log('[Cache] Vídeo já em cache:', localUri);
-        return localUri;
-      }
-
-      console.log('[Cache] Baixando vídeo:', url, 'para', localUri);
-      try {
-        const { uri } = await FileSystem.downloadAsync(url, localUri);
-        console.log('[Cache] Vídeo baixado com sucesso para:', uri);
-        return uri;
-      } catch (error) {
-        console.error('[Cache] Erro ao baixar vídeo:', url, error);
+        console.log('[VideoLocal] Vídeo local encontrado:', localPath);
+        return localPath;
+      } else {
+        console.log('[VideoLocal] Vídeo local não encontrado, usando URL remota:', url);
         return null;
       }
     };
 
-    const fetchAndCacheVideoUrls = async () => {
-      console.log('[Video] Iniciando busca e cache de URLs de vídeo...');
-      setVideoLoading(true); // Inicia o loader do vídeo
-      await ensureDirExists();
+    const loadVideoUrls = async () => {
+      console.log('[Video] Carregando URLs de vídeo...');
       try {
         const conteudosMenuRef = ref(databaseSocial, 'configgeralapp/conteudosmenu/');
         const snapshot = await get(conteudosMenuRef);
@@ -167,39 +148,41 @@ export default function Home() {
 
         if (data) {
           const fetchedUrls: VideoUrl[] = [];
-          console.log('[Video] Dados brutos de URLs de eventos encontrados no Firebase:', JSON.stringify(data, null, 2));
+          console.log('[Video] Dados de URLs encontrados no Firebase:', Object.keys(data).length, 'itens');
+          
           for (const eventId in data) {
             const eventContent = data[eventId];
-            // A estrutura de dados indica que o conteúdo é um array onde a URL está no índice 1
             if (Array.isArray(eventContent) && eventContent.length > 1 && typeof eventContent[1] === 'string') {
               const remoteUrl = eventContent[1];
               console.log(`[Video] Processando URL: ${remoteUrl} para o evento ${eventId}`);
-              const localUri = await getCachedVideoUri(remoteUrl);
-              if (localUri) {
-                fetchedUrls.push({ id: eventId, url: remoteUrl, localUri });
-              } else {
-                fetchedUrls.push({ id: eventId, url: remoteUrl }); // Adiciona mesmo sem cache se houver erro no download
-              }
+              
+              // Verificar se existe versão local
+              const localUri = await getLocalVideoUri(remoteUrl);
+              
+              fetchedUrls.push({ 
+                id: eventId, 
+                url: remoteUrl, 
+                localUri: localUri || undefined 
+              });
             } else {
               console.warn(`[Video] Conteúdo inesperado para o evento ${eventId}:`, eventContent);
             }
           }
-          console.log('[Video] URLs de vídeo processadas (com ou sem cache):', fetchedUrls);
+          
+          console.log('[Video] URLs de vídeo processadas:', fetchedUrls.length);
           setVideoUrls(fetchedUrls);
         } else {
           console.log('[Video] Nenhuma URL de vídeo encontrada no Firebase.');
         }
       } catch (error) {
         console.error('[Firebase] Erro ao buscar URLs de vídeo do Firebase:', error);
-      } finally {
-        setVideoLoading(false); // Finaliza o loader do vídeo
       }
     };
 
-    fetchAndCacheVideoUrls();
+    loadVideoUrls();
   }, []);
 
-  // Função para avançar para o próximo vídeo
+  // Função para avançar para o próximo vídeo automaticamente (sem loader)
   const handleVideoPlaybackStatusUpdate = (status: any) => {
     if (status.didJustFinish) {
       console.log('[Video] Vídeo atual terminou. Avançando para o próximo.');
@@ -462,40 +445,30 @@ export default function Home() {
     <View style={styles.fullScreenContainer}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-      {/* Video Background */}
+      {/* Video Background - Sem loader, transição dinâmica */}
       {videoUrls.length > 0 && (
         <Video
-          source={{ uri: videoUrls[currentVideoIndex].localUri || videoUrls[currentVideoIndex].url }}
+          source={{ 
+            uri: videoUrls[currentVideoIndex].localUri || videoUrls[currentVideoIndex].url 
+          }}
           style={styles.videoBackground}
           shouldPlay
-          isLooping
+          isLooping={false}
           isMuted
           resizeMode="cover"
           onPlaybackStatusUpdate={handleVideoPlaybackStatusUpdate}
-          onLoadStart={() => {
-            console.log('[Video] Início do carregamento do vídeo.');
-            setVideoLoading(true);
-          }} // Inicia o loader quando o vídeo começa a carregar
           onLoad={() => {
-            console.log('[Video] Vídeo carregado com sucesso.');
-            setVideoLoading(false);
-          }} // Desativa o loader quando o vídeo é carregado
+            console.log('[Video] Vídeo carregado e reproduzindo:', videoUrls[currentVideoIndex].id);
+          }}
           onError={(error) => {
             console.error('[Video] Erro ao carregar vídeo:', error);
-            setVideoLoading(false); // Desativa o loader em caso de erro
+            // Em caso de erro, tenta o próximo vídeo
+            setCurrentVideoIndex((prevIndex) => (prevIndex + 1) % videoUrls.length);
           }}
         />
       )}
       {videoUrls.length === 0 && (
         <View style={styles.fallbackBackground} />
-      )}
-
-      {/* Loader para o vídeo */}
-      {videoLoading && (
-        <View style={styles.videoLoaderOverlay}>
-          <ActivityIndicator size="large" color={Colors.primary.purple} />
-          <Text style={styles.loadingText}>Carregando vídeo...</Text>
-        </View>
       )}
 
       {/* Header */}
@@ -611,23 +584,12 @@ const styles = StyleSheet.create({
     right: 0,
     backgroundColor: Colors.neutral.black,
   },
-  videoLoaderOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.7)', // Um overlay semi-transparente para o loader
-    zIndex: 5, // Garante que o loader fique acima do vídeo
-  },
   header: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)', // Semi-transparente para ver o vídeo
+    backgroundColor: 'rgba(0,0,0,0.5)',
     paddingHorizontal: Spacing.container.horizontal,
     paddingBottom: Spacing.md,
     zIndex: 10,
@@ -636,7 +598,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    height: 56, // Altura padrão do cabeçalho
+    height: 56,
   },
   headerLogo: {
     height: 32,
@@ -785,15 +747,15 @@ const styles = StyleSheet.create({
     marginLeft: Spacing.xs,
   },
   actionButton: {
-    borderRadius: Spacing.button.borderRadius,
+    borderRadius: 8,
     overflow: 'hidden',
   },
   actionButtonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: Spacing.button.paddingHorizontal,
-    paddingVertical: Spacing.button.paddingVertical,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
   },
   actionButtonText: {
     ...Typography.styles.button,
@@ -802,18 +764,17 @@ const styles = StyleSheet.create({
   },
   discoveryContainer: {
     alignItems: 'center',
-    paddingVertical: Spacing.xxxl,
+    paddingVertical: Spacing.xl,
   },
   discoveryText: {
-    ...Typography.styles.bodyLarge,
-    color: Colors.text.secondary,
-    marginTop: Spacing.lg,
-    textAlign: 'center',
+    ...Typography.styles.h3,
+    color: Colors.text.primary,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   discoverySubtext: {
     ...Typography.styles.bodyMedium,
-    color: Colors.text.tertiary,
-    marginTop: Spacing.xs,
+    color: Colors.text.secondary,
     textAlign: 'center',
     marginBottom: Spacing.xl,
   },
@@ -826,24 +787,15 @@ const styles = StyleSheet.create({
   categoryButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.neutral.white,
+    backgroundColor: Colors.neutral.lightGray,
     borderRadius: 20,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    elevation: Spacing.elevation.small,
-    shadowColor: Colors.shadow.light,
-    shadowOffset: Spacing.shadowOffset.small,
-    shadowOpacity: 0.1,
-    shadowRadius: Spacing.shadowRadius.small,
-    borderWidth: 1,
-    borderColor: Colors.neutral.lightGray,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
   },
   categoryButtonText: {
     ...Typography.styles.bodyMedium,
     color: Colors.text.primary,
     marginLeft: Spacing.xs,
-    fontWeight: Typography.fontWeight.semiBold,
   },
 });
-
 

@@ -16,6 +16,7 @@ import { useNavigation } from '@react-navigation/native';
 import { AuthContext } from '../contexts/AuthContext';
 import { ref, get, set } from 'firebase/database';
 import { databaseSocial } from '../services/firebaseappdb';
+import * as FileSystem from 'expo-file-system'; // Importar FileSystem
 
 const Colors = {
   primary: '#6366F1',
@@ -33,6 +34,9 @@ export default function Configuracoes() {
   const { user } = useContext(AuthContext);
   const [eventsBuyVisible, setEventsBuyVisible] = useState(true);
   const [loading, setLoading] = useState(true);
+
+  // Diretório onde os vídeos são armazenados (mesmo do App.tsx)
+  const VIDEO_STORAGE_DIR = FileSystem.documentDirectory + 'app_videos/';
 
   useEffect(() => {
     const fetchPrivacySetting = async () => {
@@ -73,6 +77,36 @@ export default function Configuracoes() {
       console.error('Erro ao atualizar configuração de privacidade:', error);
       Alert.alert('Erro', 'Não foi possível atualizar a configuração de privacidade.');
     }
+  };
+
+  const clearDownloadedVideos = async () => {
+    Alert.alert(
+      'Confirmar Limpeza',
+      'Tem certeza que deseja limpar todos os vídeos baixados? Isso liberará espaço no seu dispositivo.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Limpar',
+          onPress: async () => {
+            try {
+              const dirInfo = await FileSystem.getInfoAsync(VIDEO_STORAGE_DIR);
+              if (dirInfo.exists) {
+                await FileSystem.deleteAsync(VIDEO_STORAGE_DIR, { idempotent: true });
+                await FileSystem.makeDirectoryAsync(VIDEO_STORAGE_DIR, { intermediates: true }); // Recria o diretório vazio
+                Alert.alert('Sucesso', 'Vídeos baixados limpos com sucesso!');
+                console.log('Diretório de vídeos limpo:', VIDEO_STORAGE_DIR);
+              } else {
+                Alert.alert('Informação', 'Nenhum vídeo baixado encontrado para limpar.');
+                console.log('Diretório de vídeos não encontrado:', VIDEO_STORAGE_DIR);
+              }
+            } catch (error) {
+              console.error('Erro ao limpar vídeos baixados:', error);
+              Alert.alert('Erro', 'Não foi possível limpar os vídeos baixados. Tente novamente.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   if (!user) {
@@ -123,6 +157,18 @@ export default function Configuracoes() {
                 value={!eventsBuyVisible} // Invertido para refletir o texto "Ocultar"
               />
             </View>
+          </View>
+
+          {/* Nova Seção de Debug */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Debug</Text>
+            <TouchableOpacity style={styles.optionItem} onPress={clearDownloadedVideos}>
+              <View style={styles.optionTextContainer}>
+                <MaterialCommunityIcons name="delete-empty" size={20} color={Colors.error} />
+                <Text style={[styles.optionText, { color: Colors.error }]}>Limpar Dados Adicionais Baixados</Text>
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={24} color={Colors.textSecondary} />
+            </TouchableOpacity>
           </View>
         </ScrollView>
       )}
