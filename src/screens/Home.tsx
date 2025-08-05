@@ -798,4 +798,3 @@ const styles = StyleSheet.create({
     marginLeft: Spacing.xs,
   },
 });
-

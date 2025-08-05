@@ -749,7 +749,7 @@ export default function Perfil({ navigation }) {
                 color={Colors.gamification.blue}
               />
               <ProfileOption 
-                icon="account-group" 
+                iname="account-multiple"
                 text="Encontrar Amigos" 
                 onPress={() => navigation.navigate("Social")}
                 color={Colors.gamification.magenta}

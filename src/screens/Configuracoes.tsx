@@ -10,13 +10,17 @@ import {
   ScrollView,
   Platform,
   ActivityIndicator,
+  StatusBar,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { AuthContext } from '../contexts/AuthContext';
 import { ref, get, set } from 'firebase/database';
 import { databaseSocial } from '../services/firebaseappdb';
-import * as FileSystem from 'expo-file-system'; // Importar FileSystem
+import * as FileSystem from 'expo-file-system';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const Colors = {
   primary: '#6366F1',
@@ -34,8 +38,11 @@ export default function Configuracoes() {
   const { user } = useContext(AuthContext);
   const [eventsBuyVisible, setEventsBuyVisible] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [debugPasswordModalVisible, setDebugPasswordModalVisible] = useState(false);
+  const [debugPassword, setDebugPassword] = useState('');
+  const [isDebugUnlocked, setIsDebugUnlocked] = useState(false);
+  const insets = useSafeAreaInsets();
 
-  // Diretório onde os vídeos são armazenados (mesmo do App.tsx)
   const VIDEO_STORAGE_DIR = FileSystem.documentDirectory + 'app_videos/';
 
   useEffect(() => {
@@ -47,7 +54,6 @@ export default function Configuracoes() {
         if (snapshot.exists()) {
           setEventsBuyVisible(snapshot.val());
         } else {
-          // Se não houver configuração, assume como visível (true) e salva no DB
           await set(privacyRef, true);
           setEventsBuyVisible(true);
         }
@@ -92,7 +98,7 @@ export default function Configuracoes() {
               const dirInfo = await FileSystem.getInfoAsync(VIDEO_STORAGE_DIR);
               if (dirInfo.exists) {
                 await FileSystem.deleteAsync(VIDEO_STORAGE_DIR, { idempotent: true });
-                await FileSystem.makeDirectoryAsync(VIDEO_STORAGE_DIR, { intermediates: true }); // Recria o diretório vazio
+                await FileSystem.makeDirectoryAsync(VIDEO_STORAGE_DIR, { intermediates: true });
                 Alert.alert('Sucesso', 'Vídeos baixados limpos com sucesso!');
                 console.log('Diretório de vídeos limpo:', VIDEO_STORAGE_DIR);
               } else {
@@ -107,6 +113,29 @@ export default function Configuracoes() {
         },
       ]
     );
+  };
+
+  const handleDebugAccess = async () => {
+    try {
+      const debugRef = ref(databaseSocial, 'configgeralapp/dev');
+      const snapshot = await get(debugRef);
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        if (data && data.token === debugPassword) {
+          setIsDebugUnlocked(true);
+          setDebugPasswordModalVisible(false);
+          setDebugPassword('');
+          Alert.alert('Sucesso', 'Acesso DEBUG liberado!');
+        } else {
+          Alert.alert('Erro', 'Senha incorreta.');
+        }
+      } else {
+        Alert.alert('Erro', 'Configuração de DEBUG não encontrada no banco de dados.');
+      }
+    } catch (error) {
+      console.error('Erro ao verificar senha de DEBUG:', error);
+      Alert.alert('Erro', 'Não foi possível verificar a senha de DEBUG.');
+    }
   };
 
   if (!user) {
@@ -127,7 +156,7 @@ export default function Configuracoes() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : insets.top }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <MaterialCommunityIcons name="arrow-left" size={24} color={Colors.textPrimary} />
@@ -146,7 +175,7 @@ export default function Configuracoes() {
             <Text style={styles.sectionTitle}>Privacidade</Text>
             <View style={styles.optionItem}>
               <View style={styles.optionTextContainer}>
-                <MaterialCommunityIcons name="ticket-off" size={20} color={Colors.textPrimary} />
+                <MaterialCommunityIcons name="ticket-off-outline" size={20} color={Colors.textPrimary} />
                 <Text style={styles.optionText}>Ocultar exibição de ingressos de eventos adquiridos ao público</Text>
               </View>
               <Switch
@@ -154,24 +183,71 @@ export default function Configuracoes() {
                 thumbColor={Platform.OS === 'android' ? Colors.cardBackground : Colors.textSecondary}
                 ios_backgroundColor={Colors.border}
                 onValueChange={toggleEventsBuyVisible}
-                value={!eventsBuyVisible} // Invertido para refletir o texto "Ocultar"
+                value={!eventsBuyVisible}
               />
             </View>
           </View>
 
-          {/* Nova Seção de Debug */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Debug</Text>
-            <TouchableOpacity style={styles.optionItem} onPress={clearDownloadedVideos}>
-              <View style={styles.optionTextContainer}>
-                <MaterialCommunityIcons name="delete-empty" size={20} color={Colors.error} />
-                <Text style={[styles.optionText, { color: Colors.error }]}>Limpar Dados Adicionais Baixados</Text>
-              </View>
-              <MaterialCommunityIcons name="chevron-right" size={24} color={Colors.textSecondary} />
-            </TouchableOpacity>
+            {!isDebugUnlocked ? (
+              <TouchableOpacity style={styles.optionItem} onPress={() => setDebugPasswordModalVisible(true)}>
+                <View style={styles.optionTextContainer}>
+                  <MaterialCommunityIcons name="bug" size={20} color={Colors.textPrimary} />
+                  <Text style={styles.optionText}>Acessar Opções de Debug</Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={24} color={Colors.textSecondary} />
+              </TouchableOpacity>
+            ) : (
+              <>
+                <TouchableOpacity style={styles.optionItem} onPress={clearDownloadedVideos}>
+                  <View style={styles.optionTextContainer}>
+                    <MaterialCommunityIcons name="delete-empty" size={20} color={Colors.error} />
+                    <Text style={[styles.optionText, { color: Colors.error }]}>Limpar Dados Adicionais Baixados</Text>
+                  </View>
+                  <MaterialCommunityIcons name="chevron-right" size={24} color={Colors.textSecondary} />
+                </TouchableOpacity>
+                {/* Adicione outras opções de debug aqui */}
+              </>
+            )}
           </View>
         </ScrollView>
       )}
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={debugPasswordModalVisible}
+        onRequestClose={() => setDebugPasswordModalVisible(false)}
+      >
+        <View style={styles.centeredView}>
+          <View style={styles.modalView}>
+            <Text style={styles.modalTitle}>Acesso DEBUG</Text>
+            <TextInput
+              style={styles.modalTextInput}
+              placeholder="Digite a senha de DEBUG"
+              secureTextEntry
+              value={debugPassword}
+              onChangeText={setDebugPassword}
+              placeholderTextColor={Colors.textSecondary}
+            />
+            <View style={styles.modalButtonContainer}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => setDebugPasswordModalVisible(false)}
+              >
+                <Text style={styles.modalButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonConfirm]}
+                onPress={handleDebugAccess}
+              >
+                <Text style={styles.modalButtonText}>Acessar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -254,6 +330,67 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     textAlign: 'center',
     marginTop: 16,
+  },
+  centeredView: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalView: {
+    margin: 20,
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 35,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  modalTextInput: {
+    width: 250,
+    height: 40,
+    borderColor: Colors.border,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    marginBottom: 20,
+    color: Colors.textPrimary,
+  },
+  modalButtonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  modalButton: {
+    borderRadius: 10,
+    padding: 10,
+    elevation: 2,
+    flex: 1,
+    marginHorizontal: 5,
+    alignItems: 'center',
+  },
+  modalButtonCancel: {
+    backgroundColor: Colors.error,
+  },
+  modalButtonConfirm: {
+    backgroundColor: Colors.primary,
+  },
+  modalButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 });
 

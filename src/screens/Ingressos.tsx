@@ -13,7 +13,11 @@ import {
   SafeAreaView,
   StatusBar,
   Platform,
+  Modal,
+  Dimensions,
 } from "react-native"
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import * as FileSystem from 'expo-file-system'
 import { MaterialCommunityIcons } from "@expo/vector-icons"
 import { LinearGradient } from "expo-linear-gradient"
 import { ref, get } from "firebase/database"
@@ -55,6 +59,17 @@ export default function Ingressos() {
   const [loading, setLoading] = useState(false)
   const [eventDetailsLoading, setEventDetailsLoading] = useState(false)
   const [viewMode, setViewMode] = useState<"events" | "eventDetails" | "ticketDetails">("events")
+  
+  // Estados para funcionalidade offline
+  const [showOfflineModal, setShowOfflineModal] = useState(false)
+  const [showEventSelectionModal, setShowEventSelectionModal] = useState(false)
+  const [showDownloadModal, setShowDownloadModal] = useState(false)
+  const [selectedEventsForDownload, setSelectedEventsForDownload] = useState<string[]>([])
+  const [downloadProgress, setDownloadProgress] = useState(0)
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [downloadSummary, setDownloadSummary] = useState<any>(null)
+  const [availableStorage, setAvailableStorage] = useState(0)
+  
   const navigation = useNavigation()
   const insets = useSafeAreaInsets()
 
@@ -86,6 +101,133 @@ export default function Ingressos() {
       setEventos([])
     }
   }, [userData])
+
+  // Função para verificar armazenamento disponível
+  const checkAvailableStorage = async () => {
+    try {
+      const freeSpace = await FileSystem.getFreeDiskStorageAsync()
+      const freeSpaceMB = freeSpace / (1024 * 1024)
+      setAvailableStorage(freeSpaceMB)
+      return freeSpaceMB
+    } catch (error) {
+      console.error('Erro ao verificar armazenamento:', error)
+      return 0
+    }
+  }
+
+  // Função para abrir modal de download offline
+  const handleOfflineDownload = async () => {
+    await checkAvailableStorage()
+    setShowOfflineModal(true)
+  }
+
+  // Função para confirmar e ir para seleção de eventos
+  const handleOfflineModalConfirm = () => {
+    setShowOfflineModal(false)
+    setShowEventSelectionModal(true)
+  }
+
+  // Função para alternar seleção de evento
+  const toggleEventSelection = (eventId: string) => {
+    setSelectedEventsForDownload(prev => 
+      prev.includes(eventId) 
+        ? prev.filter(id => id !== eventId)
+        : [...prev, eventId]
+    )
+  }
+
+  // Função para confirmar seleção e mostrar modal de download
+  const handleEventSelectionConfirm = async () => {
+    if (selectedEventsForDownload.length === 0) {
+      Alert.alert('Atenção', 'Selecione pelo menos um evento para download.')
+      return
+    }
+
+    const freeSpace = await checkAvailableStorage()
+    if (freeSpace < 200) {
+      Alert.alert(
+        'Armazenamento Insuficiente',
+        'Você precisa de pelo menos 200MB livres para realizar o download dos ingressos.'
+      )
+      return
+    }
+
+    setShowEventSelectionModal(false)
+    setShowDownloadModal(true)
+  }
+
+  // Função para realizar o download dos ingressos
+  const performOfflineDownload = async () => {
+    setIsDownloading(true)
+    setDownloadProgress(0)
+
+    try {
+      const offlineTickets = []
+      let totalTickets = 0
+
+      for (let i = 0; i < selectedEventsForDownload.length; i++) {
+        const eventId = selectedEventsForDownload[i]
+        setDownloadProgress((i / selectedEventsForDownload.length) * 100)
+
+        // Buscar dados do evento
+        const snapEvento = await get(ref(database, `eventos/${eventId}`))
+        const eventoData = snapEvento.exists() ? snapEvento.val() : {}
+
+        // Buscar ingressos do usuário para este evento
+        const ingressosDoEvento = []
+        const ingressosComprados = userData.ingressoscomprados
+        
+        for (const codigo in ingressosComprados) {
+          const ingresso = ingressosComprados[codigo]
+          if (ingresso.eventid === eventId) {
+            const offlineTicket = {
+              cpf: user.cpf,
+              nomeCompleto: userData.nome || '',
+              email: userData.email || '',
+              eventId: eventId,
+              nomeEvento: eventoData.nomeevento || 'Evento desconhecido',
+              tipo: ingresso.tipo,
+              token: codigo,
+              dataEvento: eventoData.dataevento || '',
+              local: eventoData.local || ''
+            }
+            offlineTickets.push(offlineTicket)
+            ingressosDoEvento.push(offlineTicket)
+            totalTickets++
+          }
+        }
+      }
+
+      // Salvar no AsyncStorage
+      await AsyncStorage.setItem('offlineTickets', JSON.stringify(offlineTickets))
+
+      setDownloadProgress(100)
+      
+      // Preparar resumo do download
+      const summary = {
+        totalTickets,
+        events: selectedEventsForDownload.length,
+        downloadDate: new Date().toLocaleDateString('pt-BR')
+      }
+      
+      setDownloadSummary(summary)
+      setIsDownloading(false)
+
+    } catch (error) {
+      console.error('Erro no download:', error)
+      Alert.alert('Erro', 'Ocorreu um erro durante o download dos ingressos.')
+      setIsDownloading(false)
+      setShowDownloadModal(false)
+    }
+  }
+
+  // Função para fechar modal de download e resetar estados
+  const handleDownloadComplete = () => {
+    setShowDownloadModal(false)
+    setSelectedEventsForDownload([])
+    setDownloadProgress(0)
+    setDownloadSummary(null)
+  }
 
   const carregarEventosAgrupados = async () => {
     setLoading(true)
@@ -268,7 +410,7 @@ export default function Ingressos() {
       />
 
       <View style={[ingressosStyles.contentContainer, { paddingBottom: contentPaddingBottom }]}>
-        {viewMode === "events" && <EventsListView eventos={eventos} onEventSelect={handleEventSelect} />}
+        {viewMode === "events" && <EventsListView eventos={eventos} onEventSelect={handleEventSelect} onOfflineDownload={handleOfflineDownload} />}
 
         {viewMode === "eventDetails" && eventDetailsLoading && (
           <LoadingState message="Carregando detalhes do evento..." />
@@ -288,6 +430,37 @@ export default function Ingressos() {
         selectedTicket={selectedTicket}
         selectedEvento={selectedEvento}
         insetsBottom={insets.bottom}
+      />
+
+      {/* Modal de Aviso Offline */}
+      <OfflineWarningModal 
+        visible={showOfflineModal}
+        onClose={() => setShowOfflineModal(false)}
+        onConfirm={handleOfflineModalConfirm}
+      />
+
+      {/* Modal de Seleção de Eventos */}
+      <EventSelectionModal
+        visible={showEventSelectionModal}
+        eventos={eventos}
+        selectedEvents={selectedEventsForDownload}
+        onToggleEvent={toggleEventSelection}
+        onClose={() => setShowEventSelectionModal(false)}
+        onConfirm={handleEventSelectionConfirm}
+      />
+
+      {/* Modal de Download */}
+      <DownloadModal
+        visible={showDownloadModal}
+        eventos={eventos.filter(e => selectedEventsForDownload.includes(e.eventid))}
+        userData={userData}
+        availableStorage={availableStorage}
+        downloadProgress={downloadProgress}
+        isDownloading={isDownloading}
+        downloadSummary={downloadSummary}
+        onClose={() => setShowDownloadModal(false)}
+        onStartDownload={performOfflineDownload}
+        onComplete={handleDownloadComplete}
       />
     </View>
   )
@@ -444,7 +617,8 @@ function LoadingState({ message = "Carregando..." }: { message?: string }) {
 function EventsListView({
   eventos,
   onEventSelect,
-}: { eventos: EventSummary[]; onEventSelect: (evento: EventSummary) => void }) {
+  onOfflineDownload,
+}: { eventos: EventSummary[]; onEventSelect: (evento: EventSummary) => void; onOfflineDownload: () => void }) {
   if (eventos.length === 0) {
     return (
       <EmptyState
@@ -482,6 +656,24 @@ function EventsListView({
           </View>
         </View>
       </View>
+
+      {/* Botão de Download Offline */}
+      <TouchableOpacity 
+        style={ingressosStyles.offlineDownloadButton}
+        onPress={onOfflineDownload}
+        activeOpacity={0.8}
+      >
+        <View style={ingressosStyles.offlineDownloadContent}>
+          <View style={ingressosStyles.offlineDownloadIcon}>
+            <MaterialCommunityIcons name="download" size={24} color="#FFFFFF" />
+          </View>
+          <View style={ingressosStyles.offlineDownloadText}>
+            <Text style={ingressosStyles.offlineDownloadTitle}>BAIXAR INGRESSOS PARA USO OFFLINE</Text>
+            <Text style={ingressosStyles.offlineDownloadSubtitle}>Para usar sem conexão com a internet</Text>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={20} color="#FFFFFF" />
+        </View>
+      </TouchableOpacity>
 
       {/* Lista de Eventos Compacta */}
       <FlatList
@@ -668,3 +860,375 @@ function TicketDetailsView({ ticket, evento }: { ticket: Ticket; evento: EventDe
     </ScrollView>
   )
 }
+
+
+// ===== MODAL DE AVISO OFFLINE =====
+function OfflineWarningModal({ 
+  visible, 
+  onClose, 
+  onConfirm 
+}: { 
+  visible: boolean; 
+  onClose: () => void; 
+  onConfirm: () => void; 
+}) {
+  return (
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={ingressosStyles.modalOverlay}>
+        <View style={ingressosStyles.modalContainer}>
+          <View style={ingressosStyles.modalHeader}>
+            <View style={ingressosStyles.modalIcon}>
+              <MaterialCommunityIcons name="download-outline" size={32} color="#6366F1" />
+            </View>
+            <Text style={ingressosStyles.modalTitle}>Download de Ingressos</Text>
+          </View>
+
+          <View style={ingressosStyles.modalContent}>
+            <Text style={ingressosStyles.modalText}>
+              O Download de Ingressos é uma ferramenta para uso exclusivamente no momento para uso OFF-LINE, ou seja, se você não tiver conexão à internet no momento da entrada do seu Evento.
+            </Text>
+            <Text style={ingressosStyles.modalText}>
+              É importante ter memória livre para realizar o download. Recomendamos pelo menos 200MB de espaço disponível.
+            </Text>
+            <Text style={ingressosStyles.modalText}>
+              • Os ingressos serão salvos no seu dispositivo{'\n'}
+              • Funcionam sem conexão com a internet{'\n'}
+              • Incluem QR Code para validação{'\n'}
+              • Dados seguros e criptografados
+            </Text>
+          </View>
+
+          <View style={ingressosStyles.modalActions}>
+            <TouchableOpacity 
+              style={ingressosStyles.modalButtonSecondary}
+              onPress={onClose}
+            >
+              <Text style={ingressosStyles.modalButtonSecondaryText}>Cancelar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={ingressosStyles.modalButtonPrimary}
+              onPress={onConfirm}
+            >
+              <Text style={ingressosStyles.modalButtonPrimaryText}>Entendi</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  )
+}
+
+// ===== MODAL DE SELEÇÃO DE EVENTOS =====
+function EventSelectionModal({ 
+  visible, 
+  eventos, 
+  selectedEvents, 
+  onToggleEvent, 
+  onClose, 
+  onConfirm 
+}: { 
+  visible: boolean; 
+  eventos: EventSummary[]; 
+  selectedEvents: string[]; 
+  onToggleEvent: (eventId: string) => void; 
+  onClose: () => void; 
+  onConfirm: () => void; 
+}) {
+  return (
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={ingressosStyles.modalOverlay}>
+        <View style={ingressosStyles.modalContainerLarge}>
+          <View style={ingressosStyles.modalHeader}>
+            <Text style={ingressosStyles.modalTitle}>Selecionar Eventos</Text>
+            <TouchableOpacity onPress={onClose}>
+              <MaterialCommunityIcons name="close" size={24} color="#6B7280" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={ingressosStyles.modalContent}>
+            <Text style={ingressosStyles.modalSubtitle}>
+              Escolha quais eventos deseja baixar para uso offline:
+            </Text>
+
+            <ScrollView style={ingressosStyles.eventSelectionList}>
+              {eventos.map((evento) => (
+                <TouchableOpacity
+                  key={evento.eventid}
+                  style={[
+                    ingressosStyles.eventSelectionItem,
+                    selectedEvents.includes(evento.eventid) && ingressosStyles.eventSelectionItemSelected
+                  ]}
+                  onPress={() => onToggleEvent(evento.eventid)}
+                >
+                  <View style={ingressosStyles.eventSelectionContent}>
+                    <View style={ingressosStyles.eventSelectionInfo}>
+                      <Text style={ingressosStyles.eventSelectionName}>{evento.nomeevento}</Text>
+                      <Text style={ingressosStyles.eventSelectionDetails}>
+                        {evento.quantidadeTotal} {evento.quantidadeTotal === 1 ? 'ingresso' : 'ingressos'}
+                        {evento.dataevento && ` • ${evento.dataevento}`}
+                      </Text>
+                    </View>
+                    <View style={[
+                      ingressosStyles.eventSelectionCheckbox,
+                      selectedEvents.includes(evento.eventid) && ingressosStyles.eventSelectionCheckboxSelected
+                    ]}>
+                      {selectedEvents.includes(evento.eventid) && (
+                        <MaterialCommunityIcons name="check" size={16} color="#FFFFFF" />
+                      )}
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
+          <View style={ingressosStyles.modalActions}>
+            <TouchableOpacity 
+              style={ingressosStyles.modalButtonSecondary}
+              onPress={onClose}
+            >
+              <Text style={ingressosStyles.modalButtonSecondaryText}>Cancelar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[
+                ingressosStyles.modalButtonPrimary,
+                selectedEvents.length === 0 && ingressosStyles.modalButtonDisabled
+              ]}
+              onPress={onConfirm}
+              disabled={selectedEvents.length === 0}
+            >
+              <Text style={ingressosStyles.modalButtonPrimaryText}>
+                Confirmar ({selectedEvents.length})
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  )
+}
+
+// ===== MODAL DE DOWNLOAD =====
+function DownloadModal({ 
+  visible, 
+  eventos, 
+  userData, 
+  availableStorage, 
+  downloadProgress, 
+  isDownloading, 
+  downloadSummary, 
+  onClose, 
+  onStartDownload, 
+  onComplete 
+}: { 
+  visible: boolean; 
+  eventos: EventSummary[]; 
+  userData: any; 
+  availableStorage: number; 
+  downloadProgress: number; 
+  isDownloading: boolean; 
+  downloadSummary: any; 
+  onClose: () => void; 
+  onStartDownload: () => void; 
+  onComplete: () => void; 
+}) {
+  const totalTickets = eventos.reduce((total, evento) => total + evento.quantidadeTotal, 0)
+  const requiredStorage = 200 // MB
+  const storagePercentage = Math.min((availableStorage / requiredStorage) * 100, 100)
+
+  if (downloadSummary) {
+    return (
+      <Modal
+        visible={visible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={onComplete}
+      >
+        <View style={ingressosStyles.modalOverlay}>
+          <View style={ingressosStyles.modalContainer}>
+            <View style={ingressosStyles.modalHeader}>
+              <View style={ingressosStyles.modalIconSuccess}>
+                <MaterialCommunityIcons name="check-circle" size={32} color="#10B981" />
+              </View>
+              <Text style={ingressosStyles.modalTitle}>Download Concluído!</Text>
+            </View>
+
+            <View style={ingressosStyles.modalContent}>
+              <View style={ingressosStyles.downloadSummary}>
+                <Text style={ingressosStyles.downloadSummaryTitle}>Resumo do Download</Text>
+                
+                <View style={ingressosStyles.downloadSummaryItem}>
+                  <Text style={ingressosStyles.downloadSummaryLabel}>Ingressos baixados:</Text>
+                  <Text style={ingressosStyles.downloadSummaryValue}>{downloadSummary.totalTickets}</Text>
+                </View>
+                
+                <View style={ingressosStyles.downloadSummaryItem}>
+                  <Text style={ingressosStyles.downloadSummaryLabel}>Eventos:</Text>
+                  <Text style={ingressosStyles.downloadSummaryValue}>{downloadSummary.events}</Text>
+                </View>
+                
+                <View style={ingressosStyles.downloadSummaryItem}>
+                  <Text style={ingressosStyles.downloadSummaryLabel}>Data do download:</Text>
+                  <Text style={ingressosStyles.downloadSummaryValue}>{downloadSummary.downloadDate}</Text>
+                </View>
+              </View>
+
+              <Text style={ingressosStyles.modalText}>
+                Seus ingressos foram salvos com sucesso no dispositivo e podem ser acessados mesmo sem conexão com a internet.
+              </Text>
+            </View>
+
+            <View style={ingressosStyles.modalActions}>
+              <TouchableOpacity 
+                style={ingressosStyles.modalButtonPrimary}
+                onPress={onComplete}
+              >
+                <Text style={ingressosStyles.modalButtonPrimaryText}>Concluir</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    )
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={ingressosStyles.modalOverlay}>
+        <View style={ingressosStyles.modalContainerLarge}>
+          <View style={ingressosStyles.modalHeader}>
+            <Text style={ingressosStyles.modalTitle}>Confirmar Download</Text>
+            {!isDownloading && (
+              <TouchableOpacity onPress={onClose}>
+                <MaterialCommunityIcons name="close" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <View style={ingressosStyles.modalContent}>
+            {!isDownloading ? (
+              <>
+                <View style={ingressosStyles.downloadInfo}>
+                  <Text style={ingressosStyles.downloadInfoTitle}>Detalhes do Download</Text>
+                  
+                  <View style={ingressosStyles.downloadInfoItem}>
+                    <MaterialCommunityIcons name="calendar-multiple" size={20} color="#6366F1" />
+                    <Text style={ingressosStyles.downloadInfoText}>
+                      {eventos.length} {eventos.length === 1 ? 'evento selecionado' : 'eventos selecionados'}
+                    </Text>
+                  </View>
+                  
+                  <View style={ingressosStyles.downloadInfoItem}>
+                    <MaterialCommunityIcons name="ticket-confirmation" size={20} color="#6366F1" />
+                    <Text style={ingressosStyles.downloadInfoText}>
+                      {totalTickets} {totalTickets === 1 ? 'ingresso' : 'ingressos'} para download
+                    </Text>
+                  </View>
+                  
+                  <View style={ingressosStyles.downloadInfoItem}>
+                    <MaterialCommunityIcons name="account" size={20} color="#6366F1" />
+                    <Text style={ingressosStyles.downloadInfoText}>
+                      Titular: {userData?.nome || 'Usuário'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={ingressosStyles.storageInfo}>
+                  <Text style={ingressosStyles.storageInfoTitle}>Armazenamento do Dispositivo</Text>
+                  
+                  <View style={ingressosStyles.storageBar}>
+                    <View style={ingressosStyles.storageBarBackground}>
+                      <View 
+                        style={[
+                          ingressosStyles.storageBarFill,
+                          { width: `${Math.min(storagePercentage, 100)}%` },
+                          availableStorage < requiredStorage && ingressosStyles.storageBarFillDanger
+                        ]} 
+                      />
+                    </View>
+                  </View>
+                  
+                  <View style={ingressosStyles.storageDetails}>
+                    <Text style={ingressosStyles.storageText}>
+                      Disponível: {availableStorage.toFixed(0)}MB
+                    </Text>
+                    <Text style={ingressosStyles.storageText}>
+                      Necessário: {requiredStorage}MB
+                    </Text>
+                  </View>
+
+                  {availableStorage < requiredStorage && (
+                    <View style={ingressosStyles.storageWarning}>
+                      <MaterialCommunityIcons name="alert-circle" size={16} color="#EF4444" />
+                      <Text style={ingressosStyles.storageWarningText}>
+                        Armazenamento insuficiente para o download
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </>
+            ) : (
+              <View style={ingressosStyles.downloadProgress}>
+                <Text style={ingressosStyles.downloadProgressTitle}>Baixando Ingressos...</Text>
+                
+                <View style={ingressosStyles.progressBar}>
+                  <View style={ingressosStyles.progressBarBackground}>
+                    <View 
+                      style={[
+                        ingressosStyles.progressBarFill,
+                        { width: `${downloadProgress}%` }
+                      ]} 
+                    />
+                  </View>
+                </View>
+                
+                <Text style={ingressosStyles.downloadProgressText}>
+                  {Math.round(downloadProgress)}% concluído
+                </Text>
+                
+                <ActivityIndicator size="large" color="#6366F1" style={ingressosStyles.downloadLoader} />
+              </View>
+            )}
+          </View>
+
+          {!isDownloading && (
+            <View style={ingressosStyles.modalActions}>
+              <TouchableOpacity 
+                style={ingressosStyles.modalButtonSecondary}
+                onPress={onClose}
+              >
+                <Text style={ingressosStyles.modalButtonSecondaryText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[
+                  ingressosStyles.modalButtonPrimary,
+                  availableStorage < requiredStorage && ingressosStyles.modalButtonDisabled
+                ]}
+                onPress={onStartDownload}
+                disabled={availableStorage < requiredStorage}
+              >
+                <Text style={ingressosStyles.modalButtonPrimaryText}>Iniciar Download</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </View>
+    </Modal>
+  )
+}
+

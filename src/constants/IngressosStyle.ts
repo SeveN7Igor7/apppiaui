@@ -666,4 +666,501 @@ export const ingressosStyles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
   },
+
+
+  // ===== ESTILOS PARA FUNCIONALIDADE OFFLINE =====
+  
+  // Botão de Download Offline
+  offlineDownloadButton: {
+    backgroundColor: Colors.primary.main,
+    marginHorizontal: Spacing.lg,
+    marginVertical: Spacing.md,
+    borderRadius: 12,
+    ...Shadows.md,
+  },
+  
+  offlineDownloadContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+  },
+  
+  offlineDownloadIcon: {
+    width: 48,
+    height: 48,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Spacing.md,
+  },
+  
+  offlineDownloadText: {
+    flex: 1,
+  },
+  
+  offlineDownloadTitle: {
+    fontSize: Typography.fontSize.base,
+    fontFamily: Typography.fontFamily.semibold,
+    color: Colors.neutral.white,
+    marginBottom: 2,
+  },
+  
+  offlineDownloadSubtitle: {
+    fontSize: Typography.fontSize.sm,
+    fontFamily: Typography.fontFamily.regular,
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+
+  // ===== ESTILOS DOS MODAIS =====
+  
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.lg,
+  },
+  
+  modalContainer: {
+    backgroundColor: Colors.neutral.white,
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 400,
+    ...Shadows.xl,
+  },
+  
+  modalContainerLarge: {
+    backgroundColor: Colors.neutral.white,
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 500,
+    maxHeight: '80%',
+    ...Shadows.xl,
+  },
+  
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing['2xl'],
+    paddingTop: Spacing['2xl'],
+    paddingBottom: Spacing.lg,
+  },
+  
+  modalIcon: {
+    width: 48,
+    height: 48,
+    backgroundColor: Colors.primary.light + '20',
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Spacing.md,
+  },
+  
+  modalIconSuccess: {
+    width: 48,
+    height: 48,
+    backgroundColor: Colors.success.bg,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Spacing.md,
+  },
+  
+  modalTitle: {
+    fontSize: Typography.fontSize.xl,
+    fontFamily: Typography.fontFamily.semibold,
+    color: Colors.neutral.gray900,
+    flex: 1,
+  },
+  
+  modalSubtitle: {
+    fontSize: Typography.fontSize.base,
+    fontFamily: Typography.fontFamily.regular,
+    color: Colors.neutral.gray600,
+    marginBottom: Spacing.lg,
+  },
+  
+  modalContent: {
+    paddingHorizontal: Spacing['2xl'],
+    paddingBottom: Spacing.lg,
+  },
+  
+  modalText: {
+    fontSize: Typography.fontSize.base,
+    fontFamily: Typography.fontFamily.regular,
+    color: Colors.neutral.gray700,
+    lineHeight: Typography.lineHeight.relaxed * Typography.fontSize.base,
+    marginBottom: Spacing.md,
+  },
+  
+  modalActions: {
+    flexDirection: 'row',
+    paddingHorizontal: Spacing['2xl'],
+    paddingBottom: Spacing['2xl'],
+    gap: Spacing.md,
+  },
+  
+  modalButtonPrimary: {
+    flex: 1,
+    backgroundColor: Colors.primary.main,
+    paddingVertical: Spacing.md,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  
+  modalButtonSecondary: {
+    flex: 1,
+    backgroundColor: Colors.neutral.gray100,
+    paddingVertical: Spacing.md,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  
+  modalButtonDisabled: {
+    backgroundColor: Colors.neutral.gray300,
+  },
+  
+  modalButtonPrimaryText: {
+    fontSize: Typography.fontSize.base,
+    fontFamily: Typography.fontFamily.semibold,
+    color: Colors.neutral.white,
+  },
+  
+  modalButtonSecondaryText: {
+    fontSize: Typography.fontSize.base,
+    fontFamily: Typography.fontFamily.semibold,
+    color: Colors.neutral.gray700,
+  },
+
+  // ===== SELEÇÃO DE EVENTOS =====
+  
+  eventSelectionList: {
+    maxHeight: 300,
+  },
+  
+  eventSelectionItem: {
+    backgroundColor: Colors.neutral.white,
+    borderWidth: 1,
+    borderColor: Colors.neutral.gray200,
+    borderRadius: 8,
+    marginBottom: Spacing.sm,
+    padding: Spacing.md,
+  },
+  
+  eventSelectionItemSelected: {
+    borderColor: Colors.primary.main,
+    backgroundColor: Colors.primary.light + '10',
+  },
+  
+  eventSelectionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  
+  eventSelectionInfo: {
+    flex: 1,
+  },
+  
+  eventSelectionName: {
+    fontSize: Typography.fontSize.base,
+    fontFamily: Typography.fontFamily.semibold,
+    color: Colors.neutral.gray900,
+    marginBottom: 2,
+  },
+  
+  eventSelectionDetails: {
+    fontSize: Typography.fontSize.sm,
+    fontFamily: Typography.fontFamily.regular,
+    color: Colors.neutral.gray600,
+  },
+  
+  eventSelectionCheckbox: {
+    width: 24,
+    height: 24,
+    borderWidth: 2,
+    borderColor: Colors.neutral.gray300,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  
+  eventSelectionCheckboxSelected: {
+    backgroundColor: Colors.primary.main,
+    borderColor: Colors.primary.main,
+  },
+
+  // ===== INFORMAÇÕES DE DOWNLOAD =====
+  
+  downloadInfo: {
+    backgroundColor: Colors.neutral.gray50,
+    borderRadius: 8,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
+  },
+  
+  downloadInfoTitle: {
+    fontSize: Typography.fontSize.lg,
+    fontFamily: Typography.fontFamily.semibold,
+    color: Colors.neutral.gray900,
+    marginBottom: Spacing.md,
+  },
+  
+  downloadInfoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+  },
+  
+  downloadInfoText: {
+    fontSize: Typography.fontSize.base,
+    fontFamily: Typography.fontFamily.regular,
+    color: Colors.neutral.gray700,
+    marginLeft: Spacing.sm,
+  },
+
+  // ===== INFORMAÇÕES DE ARMAZENAMENTO =====
+  
+  storageInfo: {
+    backgroundColor: Colors.neutral.gray50,
+    borderRadius: 8,
+    padding: Spacing.lg,
+  },
+  
+  storageInfoTitle: {
+    fontSize: Typography.fontSize.lg,
+    fontFamily: Typography.fontFamily.semibold,
+    color: Colors.neutral.gray900,
+    marginBottom: Spacing.md,
+  },
+  
+  storageBar: {
+    marginBottom: Spacing.sm,
+  },
+  
+  storageBarBackground: {
+    height: 8,
+    backgroundColor: Colors.neutral.gray200,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  
+  storageBarFill: {
+    height: '100%',
+    backgroundColor: Colors.success.main,
+    borderRadius: 4,
+  },
+  
+  storageBarFillDanger: {
+    backgroundColor: Colors.error.main,
+  },
+  
+  storageDetails: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.sm,
+  },
+  
+  storageText: {
+    fontSize: Typography.fontSize.sm,
+    fontFamily: Typography.fontFamily.regular,
+    color: Colors.neutral.gray600,
+  },
+  
+  storageWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.error.bg,
+    padding: Spacing.sm,
+    borderRadius: 6,
+  },
+  
+  storageWarningText: {
+    fontSize: Typography.fontSize.sm,
+    fontFamily: Typography.fontFamily.regular,
+    color: Colors.error.main,
+    marginLeft: Spacing.xs,
+  },
+
+  // ===== PROGRESSO DE DOWNLOAD =====
+  
+  downloadProgress: {
+    alignItems: 'center',
+    paddingVertical: Spacing['2xl'],
+  },
+  
+  downloadProgressTitle: {
+    fontSize: Typography.fontSize.lg,
+    fontFamily: Typography.fontFamily.semibold,
+    color: Colors.neutral.gray900,
+    marginBottom: Spacing['2xl'],
+  },
+  
+  progressBar: {
+    width: '100%',
+    marginBottom: Spacing.lg,
+  },
+  
+  progressBarBackground: {
+    height: 8,
+    backgroundColor: Colors.neutral.gray200,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: Colors.primary.main,
+    borderRadius: 4,
+  },
+  
+  downloadProgressText: {
+    fontSize: Typography.fontSize.base,
+    fontFamily: Typography.fontFamily.regular,
+    color: Colors.neutral.gray600,
+    marginBottom: Spacing.lg,
+  },
+  
+  downloadLoader: {
+    marginTop: Spacing.md,
+  },
+
+  // ===== RESUMO DE DOWNLOAD =====
+  
+  downloadSummary: {
+    backgroundColor: Colors.success.bg,
+    borderRadius: 8,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
+  },
+  
+  downloadSummaryTitle: {
+    fontSize: Typography.fontSize.lg,
+    fontFamily: Typography.fontFamily.semibold,
+    color: Colors.success.main,
+    marginBottom: Spacing.md,
+  },
+  
+  downloadSummaryItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+  },
+  
+  downloadSummaryLabel: {
+    fontSize: Typography.fontSize.base,
+    fontFamily: Typography.fontFamily.regular,
+    color: Colors.neutral.gray700,
+  },
+  
+  downloadSummaryValue: {
+    fontSize: Typography.fontSize.base,
+    fontFamily: Typography.fontFamily.semibold,
+    color: Colors.neutral.gray900,
+  },
+
+
+  // ===== ESTILOS PARA TELA OFFLINE =====
+  
+  // Banner Offline
+  offlineBanner: {
+    backgroundColor: Colors.primary.main,
+    marginHorizontal: Spacing.lg,
+    marginVertical: Spacing.md,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+    ...Shadows.md,
+  },
+  
+  offlineBannerIcon: {
+    width: 48,
+    height: 48,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Spacing.md,
+  },
+  
+  offlineBannerText: {
+    flex: 1,
+  },
+  
+  offlineBannerTitle: {
+    fontSize: Typography.fontSize.lg,
+    fontFamily: Typography.fontFamily.semibold,
+    color: Colors.neutral.white,
+    marginBottom: 2,
+  },
+  
+  offlineBannerSubtitle: {
+    fontSize: Typography.fontSize.sm,
+    fontFamily: Typography.fontFamily.regular,
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+
+  // Card de Evento Offline
+  offlineEventCard: {
+    backgroundColor: Colors.background.card,
+    borderRadius: 12,
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
+    ...Shadows.sm,
+  },
+  
+  offlineEventIcon: {
+    width: 80,
+    height: 80,
+    backgroundColor: Colors.primary.light + '20',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+
+  // Header de Detalhes do Evento Offline
+  offlineEventDetailsHeader: {
+    backgroundColor: Colors.background.card,
+    marginHorizontal: Spacing.lg,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.lg,
+    borderRadius: 16,
+    padding: Spacing.lg,
+    alignItems: 'center',
+    ...Shadows.sm,
+  },
+  
+  offlineEventDetailIcon: {
+    width: 80,
+    height: 80,
+    backgroundColor: Colors.primary.light + '20',
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.md,
+  },
+
+  // Badge Offline
+  offlineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.primary.light + '20',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: 20,
+  },
+  
+  offlineBadgeText: {
+    fontSize: Typography.fontSize.sm,
+    fontFamily: Typography.fontFamily.medium,
+    color: Colors.primary.main,
+    marginLeft: Spacing.xs,
+  },
 });

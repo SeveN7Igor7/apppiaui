@@ -3,18 +3,23 @@ import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import StackNavigator from './src/navigation/StackNavigator';
 import { AuthProvider } from './src/contexts/AuthContext';
-import { 
-  View, 
-  Text, 
-  ActivityIndicator, 
-  StyleSheet, 
-  Alert, 
+import {
+  View,
+  Text,
+  ActivityIndicator,
+  StyleSheet,
+  Alert,
   Animated,
-  Image
+  Image,
+  TouchableOpacity
 } from 'react-native';
 import { ref, onValue, get } from 'firebase/database';
 import { databaseSocial } from './src/services/firebaseappdb';
 import * as FileSystem from 'expo-file-system';
+import NetInfo from '@react-native-community/netinfo';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import IngressosOffline from './src/screens/IngressosOffline';
 
 type VideoDownloadInfo = {
   id: string;
@@ -27,6 +32,9 @@ export default function App() {
   const [appVisible, setAppVisible] = useState<boolean | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isConnected, setIsConnected] = useState<boolean | null>(null);
+  const [showOfflineTickets, setShowOfflineTickets] = useState(false);
+  const [hasOfflineTickets, setHasOfflineTickets] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<{
     isDownloading: boolean;
     progress: number;
@@ -47,6 +55,29 @@ export default function App() {
 
   // Diretório para armazenar vídeos permanentemente no dispositivo
   const VIDEO_STORAGE_DIR = FileSystem.documentDirectory + 'app_videos/';
+
+  // Verificar se há ingressos offline salvos
+  const checkOfflineTickets = async () => {
+    try {
+      const storedTickets = await AsyncStorage.getItem('offlineTickets');
+      setHasOfflineTickets(!!storedTickets);
+    } catch (error) {
+      console.error('Erro ao verificar ingressos offline:', error);
+      setHasOfflineTickets(false);
+    }
+  };
+
+  // Configurar monitoramento de conectividade
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(state => {
+      setIsConnected(state.isConnected);
+    });
+
+    // Verificar ingressos offline na inicialização
+    checkOfflineTickets();
+
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     // Animar progresso do download
@@ -319,6 +350,67 @@ export default function App() {
     );
   }
 
+  // Mostrar tela de ingressos offline quando solicitado
+  if (showOfflineTickets) {
+    return (
+      <SafeAreaProvider>
+        <NavigationContainer>
+          <IngressosOffline />
+        </NavigationContainer>
+      </SafeAreaProvider>
+    );
+  }
+
+  // Mostrar tela de sem conexão quando não há internet e há ingressos offline
+  if (isConnected === false && hasOfflineTickets) {
+    return (
+      <View style={styles.container}>
+        <Image 
+          source={require('./src/images/logo.png')} 
+          style={styles.logo}
+          resizeMode="contain"
+        />
+        
+        <View style={styles.offlineContainer}>
+          <MaterialCommunityIcons name="wifi-off" size={64} color="#FFF" />
+          <Text style={styles.offlineTitle}>Sem Conexão com a Internet</Text>
+          <Text style={styles.offlineMessage}>
+            Você está sem acesso à internet no momento. Apenas a funcionalidade de ingressos offline está disponível.
+          </Text>
+          
+          <TouchableOpacity 
+            style={styles.offlineButton}
+            onPress={() => setShowOfflineTickets(true)}
+          >
+            <MaterialCommunityIcons name="ticket-outline" size={24} color="#000" />
+            <Text style={styles.offlineButtonText}>Acessar Ingressos Offline</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // Mostrar tela de sem conexão simples quando não há internet e não há ingressos offline
+  if (isConnected === false && !hasOfflineTickets) {
+    return (
+      <View style={styles.container}>
+        <Image 
+          source={require('./src/images/logo.png')} 
+          style={styles.logo}
+          resizeMode="contain"
+        />
+        
+        <View style={styles.offlineContainer}>
+          <MaterialCommunityIcons name="wifi-off" size={64} color="#FFF" />
+          <Text style={styles.offlineTitle}>Sem Conexão com a Internet</Text>
+          <Text style={styles.offlineMessage}>
+            Verifique sua conexão com a internet e tente novamente.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <SafeAreaProvider>
       <AuthProvider>
@@ -392,5 +484,43 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 20,
   },
+  offlineContainer: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  offlineTitle: {
+    color: '#FFF',
+    fontSize: 24,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginTop: 20,
+    marginBottom: 15,
+  },
+  offlineMessage: {
+    color: '#CCC',
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 40,
+    paddingHorizontal: 20,
+  },
+  offlineButton: {
+    backgroundColor: '#FFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 15,
+    paddingHorizontal: 25,
+    borderRadius: 25,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  offlineButtonText: {
+    color: '#000',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 10,
+  },
 });
-
