@@ -396,10 +396,8 @@ export default function Explorar() {
       {/* Header com fundo preto */}
       <View style={explorarStyles.header}>
         <View style={explorarStyles.headerContent}>
-          <MaterialCommunityIcons name="compass" size={24} color={Colors.text.onPrimary} />
           <Text style={explorarStyles.headerTitle}>Explorar Eventos</Text>
           <TouchableOpacity style={explorarStyles.profileButton}>
-            <MaterialCommunityIcons name="account-circle" size={24} color={Colors.text.onPrimary} />
           </TouchableOpacity>
         </View>
       </View>

@@ -214,6 +214,56 @@ export default function EventDetails() {
     return horario.replace('h', ':');
   };
 
+  // Função para verificar se o evento já começou (abertura dos portões)
+  const eventoJaComecou = (): boolean => {
+    if (!evento?.datainicio || !evento?.aberturaportas) return false;
+    
+    try {
+      const agora = new Date();
+      const [dia, mes, ano] = evento.datainicio.split('/').map(Number);
+      const [hora, minuto] = evento.aberturaportas.replace('h', ':').split(':').map(Number);
+      
+      // Criar data do evento com horário de abertura dos portões
+      const dataAbertura = new Date(ano, mes - 1, dia, hora, minuto);
+      
+      console.log('[EventDetails] Verificando se evento começou:', {
+        agora: agora.toISOString(),
+        dataAbertura: dataAbertura.toISOString(),
+        jaComecou: agora >= dataAbertura
+      });
+      
+      return agora >= dataAbertura;
+    } catch (error) {
+      console.error('[EventDetails] Erro ao verificar se evento começou:', error);
+      return false;
+    }
+  };
+
+  // Função para obter mensagem de quando a avaliação será liberada
+  const getMensagemLiberacaoVibe = (): string => {
+    if (!evento?.datainicio || !evento?.aberturaportas) return '';
+    
+    try {
+      const [dia, mes, ano] = evento.datainicio.split('/').map(Number);
+      const [hora, minuto] = evento.aberturaportas.replace('h', ':').split(':').map(Number);
+      const dataAbertura = new Date(ano, mes - 1, dia, hora, minuto);
+      
+      const opcoes: Intl.DateTimeFormatOptions = {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'America/Sao_Paulo'
+      };
+      
+      const dataFormatada = dataAbertura.toLocaleString('pt-BR', opcoes);
+      return `Avaliação liberada a partir de ${dataFormatada}`;
+    } catch (error) {
+      return 'Avaliação será liberada quando o evento começar';
+    }
+  };
+
   const handleOpenSalesPage = () => {
     if (!evento) return;
     const url = `https://piauitickets.com/comprar/${eventId}/${evento.nomeurl || ''}`;
@@ -234,6 +284,16 @@ export default function EventDetails() {
     }
     
     if (!evento) return;
+    
+    // Verificar se o evento já começou
+    if (!eventoJaComecou()) {
+      Alert.alert(
+        'Avaliação não disponível',
+        'A avaliação de vibe só estará disponível após a abertura dos portões do evento.\n\n' + getMensagemLiberacaoVibe(),
+        [{ text: 'Entendi', style: 'default' }]
+      );
+      return;
+    }
     
     navigation.navigate("VibeScreen" as never, {
       eventId: evento.id,
@@ -431,7 +491,7 @@ export default function EventDetails() {
                   <MaterialCommunityIcons
                     key={star}
                     name={star <= getVibeStars() ? "star" : "star-outline"}
-                    size={24}
+                    size={28}
                     color={star <= getVibeStars() ? Colors.primary.orange : Colors.text.tertiary}
                   />
                 ))}
@@ -442,9 +502,35 @@ export default function EventDetails() {
                   {vibe.count} {vibe.count === 1 ? 'avaliação' : 'avaliações'} na última hora
                 </Text>
               )}
-              <TouchableOpacity style={eventDetailsStyles.vibeActionButton} onPress={handleAvaliarVibe}>
-                <Text style={eventDetailsStyles.vibeActionButtonText}>Avaliar Vibe</Text>
+              
+              {/* Botão de avaliar com estado condicional */}
+              <TouchableOpacity 
+                style={[
+                  eventDetailsStyles.vibeActionButton,
+                  !eventoJaComecou() && eventDetailsStyles.vibeActionButtonDisabled
+                ]} 
+                onPress={handleAvaliarVibe}
+                disabled={!eventoJaComecou()}
+              >
+                <MaterialCommunityIcons 
+                  name={eventoJaComecou() ? "heart" : "clock-outline"} 
+                  size={20} 
+                  color={eventoJaComecou() ? Colors.text.onPrimary : Colors.text.tertiary} 
+                />
+                <Text style={[
+                  eventDetailsStyles.vibeActionButtonText,
+                  !eventoJaComecou() && eventDetailsStyles.vibeActionButtonTextDisabled
+                ]}>
+                  {eventoJaComecou() ? 'Avaliar Vibe' : 'Aguardando Início'}
+                </Text>
               </TouchableOpacity>
+              
+              {/* Mensagem explicativa quando desabilitado */}
+              {!eventoJaComecou() && (
+                <Text style={eventDetailsStyles.vibeDisabledMessage}>
+                  {getMensagemLiberacaoVibe()}
+                </Text>
+              )}
             </View>
           </View>
 
@@ -474,10 +560,17 @@ export default function EventDetails() {
                   </LinearGradient>
                 </TouchableOpacity>
                 
-                <TouchableOpacity style={eventDetailsStyles.secondaryActionButton} onPress={handleAvaliarVibe}>
-                  <MaterialCommunityIcons name="heart" size={20} color={Colors.primary.purple} />
-                  <Text style={eventDetailsStyles.secondaryActionButtonText}>Avaliar Vibe</Text>
-                </TouchableOpacity>
+                {eventoJaComecou() ? (
+                  <TouchableOpacity style={eventDetailsStyles.secondaryActionButton} onPress={handleAvaliarVibe}>
+                    <MaterialCommunityIcons name="heart" size={20} color={Colors.primary.purple} />
+                    <Text style={eventDetailsStyles.secondaryActionButtonText}>Avaliar Vibe</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={eventDetailsStyles.disabledButton}>
+                    <MaterialCommunityIcons name="clock-outline" size={20} color={Colors.text.tertiary} />
+                    <Text style={eventDetailsStyles.disabledButtonText}>Avaliação em Breve</Text>
+                  </View>
+                )}
               </>
             ) : (
               <>
@@ -492,10 +585,17 @@ export default function EventDetails() {
                   <Text style={eventDetailsStyles.disabledButtonText}>Vendas Encerradas</Text>
                 </View>
                 
-                <TouchableOpacity style={eventDetailsStyles.secondaryActionButton} onPress={handleAvaliarVibe}>
-                  <MaterialCommunityIcons name="heart" size={20} color={Colors.primary.purple} />
-                  <Text style={eventDetailsStyles.secondaryActionButtonText}>Avaliar Vibe</Text>
-                </TouchableOpacity>
+                {eventoJaComecou() ? (
+                  <TouchableOpacity style={eventDetailsStyles.secondaryActionButton} onPress={handleAvaliarVibe}>
+                    <MaterialCommunityIcons name="heart" size={20} color={Colors.primary.purple} />
+                    <Text style={eventDetailsStyles.secondaryActionButtonText}>Avaliar Vibe</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={eventDetailsStyles.disabledButton}>
+                    <MaterialCommunityIcons name="clock-outline" size={20} color={Colors.text.tertiary} />
+                    <Text style={eventDetailsStyles.disabledButtonText}>Avaliação em Breve</Text>
+                  </View>
+                )}
               </>
             )}
           </View>

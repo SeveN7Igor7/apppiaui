@@ -184,7 +184,8 @@ export default function Home() {
 
   // Função para avançar para o próximo vídeo automaticamente (sem loader)
   const handleVideoPlaybackStatusUpdate = (status: any) => {
-    if (status.didJustFinish) {
+    // Só avança para o próximo se houver mais de um vídeo
+    if (status.didJustFinish && videoUrls.length > 1) {
       console.log('[Video] Vídeo atual terminou. Avançando para o próximo.');
       setCurrentVideoIndex((prevIndex) => (prevIndex + 1) % videoUrls.length);
     }
@@ -445,7 +446,7 @@ export default function Home() {
     <View style={styles.fullScreenContainer}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-      {/* Video Background - Sem loader, transição dinâmica */}
+      {/* Video Background - CORRIGIDO */}
       {videoUrls.length > 0 && (
         <Video
           source={{ 
@@ -453,7 +454,10 @@ export default function Home() {
           }}
           style={styles.videoBackground}
           shouldPlay
-          isLooping={false}
+          // AQUI ESTÁ A CORREÇÃO:
+          // Se houver apenas 1 vídeo, isLooping será true.
+          // Se houver mais de 1, será false, permitindo a troca de vídeo.
+          isLooping={videoUrls.length === 1}
           isMuted
           resizeMode="cover"
           onPlaybackStatusUpdate={handleVideoPlaybackStatusUpdate}
@@ -462,8 +466,10 @@ export default function Home() {
           }}
           onError={(error) => {
             console.error('[Video] Erro ao carregar vídeo:', error);
-            // Em caso de erro, tenta o próximo vídeo
-            setCurrentVideoIndex((prevIndex) => (prevIndex + 1) % videoUrls.length);
+            // Em caso de erro, tenta o próximo vídeo (se houver mais de um)
+            if (videoUrls.length > 1) {
+              setCurrentVideoIndex((prevIndex) => (prevIndex + 1) % videoUrls.length);
+            }
           }}
         />
       )}

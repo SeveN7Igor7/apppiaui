@@ -5,6 +5,9 @@ import { Spacing } from '../constants/Spacing';
 
 const { width, height } = Dimensions.get('window');
 
+// Detectar altura do menu bar do celular (aproximadamente 34px no iOS e 48px no Android)
+const BOTTOM_SAFE_AREA = Platform.OS === 'ios' ? 34 : 48;
+
 export const eventDetailsStyles = StyleSheet.create({
   // Container Principal
   container: {
@@ -233,6 +236,7 @@ export const eventDetailsStyles = StyleSheet.create({
     ...Typography.styles.h3,
     color: Colors.text.primary,
     marginBottom: Spacing.md,
+    textAlign: 'center',
   },
   vibeContainer: {
     alignItems: 'center',
@@ -241,17 +245,20 @@ export const eventDetailsStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: Spacing.sm,
+    gap: Spacing.xs,
   },
   vibeMessage: {
     ...Typography.styles.bodyLarge,
     color: Colors.text.secondary,
     textAlign: 'center',
     marginBottom: Spacing.xs,
+    fontWeight: Typography.fontWeight.medium,
   },
   vibeCount: {
     ...Typography.styles.bodySmall,
     color: Colors.text.tertiary,
     textAlign: 'center',
+    marginBottom: Spacing.md,
   },
   vibeActionButton: {
     marginTop: Spacing.md,
@@ -259,11 +266,37 @@ export const eventDetailsStyles = StyleSheet.create({
     borderRadius: Spacing.button.borderRadius,
     paddingHorizontal: Spacing.button.paddingHorizontal,
     paddingVertical: Spacing.button.paddingVertical,
+    minWidth: 200,
+    elevation: 2,
+    shadowColor: Colors.primary.purple,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+  },
+  vibeActionButtonDisabled: {
+    backgroundColor: Colors.neutral.lightGray,
+    elevation: 0,
+    shadowOpacity: 0,
   },
   vibeActionButtonText: {
     ...Typography.styles.button,
     color: Colors.text.onPrimary,
     textAlign: 'center',
+    fontWeight: Typography.fontWeight.semiBold,
+  },
+  vibeActionButtonTextDisabled: {
+    color: Colors.text.tertiary,
+  },
+  vibeDisabledMessage: {
+    ...Typography.styles.bodySmall,
+    color: Colors.text.tertiary,
+    textAlign: 'center',
+    marginTop: Spacing.xs,
+    fontStyle: 'italic',
   },
   
   // Description Section
@@ -284,10 +317,12 @@ export const eventDetailsStyles = StyleSheet.create({
   // Actions Section
   actionsSection: {
     paddingTop: Spacing.lg,
-    paddingBottom: Platform.OS === 'ios' ? Spacing.xl : Spacing.lg,
+    paddingBottom: Platform.OS === 'ios' ? Spacing.xl + BOTTOM_SAFE_AREA : Spacing.lg + BOTTOM_SAFE_AREA,
+    paddingHorizontal: Spacing.container.horizontal,
     borderTopWidth: 1,
     borderTopColor: Colors.neutral.lightGray,
     gap: Spacing.md,
+    backgroundColor: Colors.neutral.white,
   },
   
   // Primary Action Button

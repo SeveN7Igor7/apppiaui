@@ -175,7 +175,7 @@ export default function Configuracoes() {
             <Text style={styles.sectionTitle}>Privacidade</Text>
             <View style={styles.optionItem}>
               <View style={styles.optionTextContainer}>
-                <MaterialCommunityIcons name="ticket-off-outline" size={20} color={Colors.textPrimary} />
+                <MaterialCommunityIcons name="ticket" size={20} color={Colors.textPrimary} />
                 <Text style={styles.optionText}>Ocultar exibição de ingressos de eventos adquiridos ao público</Text>
               </View>
               <Switch
@@ -222,10 +222,10 @@ export default function Configuracoes() {
       >
         <View style={styles.centeredView}>
           <View style={styles.modalView}>
-            <Text style={styles.modalTitle}>Acesso DEBUG</Text>
+            <Text style={styles.modalTitle}>Insira o token de liberação</Text>
             <TextInput
               style={styles.modalTextInput}
-              placeholder="Digite a senha de DEBUG"
+              placeholder="Token de Acesso"
               secureTextEntry
               value={debugPassword}
               onChangeText={setDebugPassword}

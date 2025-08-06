@@ -2,3 +2,16 @@ PARA ADICIONAR O SOCIAL OU O INGRESSOS DE NOVO NO BottomTabs pode colocar no cod
 
  <Tab.Screen name="Social" component={Social} />
 <Tab.Screen name="Ingressos" component={Ingressos} />
+
+PARA ADICIONAR O EDITAR PERFI
+
+<ProfileOption 
+                icon="create-outline" 
+                text="Editar Perfil" 
+                onPress={() => navigation.navigate('EditarPerfil')}
+                color={Colors.gamification.green}
+              />
+
+
+
+              
