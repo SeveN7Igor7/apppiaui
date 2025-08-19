@@ -15,6 +15,8 @@ import {
   Image,
   Dimensions,
   Linking,
+  FlatList,
+  StatusBar,
 } from 'react-native';
 import { ref, get } from 'firebase/database';
 import { database } from '../services/firebase';
@@ -40,6 +42,16 @@ const Colors = {
   warning: '#F59E0B',
   border: '#E5E7EB',
 };
+
+// Interface para eventos participados
+interface EventoParticipado {
+  eventid: string;
+  nomeevento: string;
+  imageurl: string;
+  quantidadeIngressos: number;
+  dataevento?: string;
+  local?: string;
+}
 
 // ==================== COMPONENTES PRINCIPAIS ====================
 // Componente de Login
@@ -177,12 +189,145 @@ const ProfileOption = ({ icon, text, onPress, color = Colors.primary }) => {
   );
 };
 
+// Componente de Grid de Eventos Participados (estilo Instagram)
+const EventosParticipados = ({ eventosParticipados, navigation }) => {
+  // Configurações responsivas baseadas na quantidade de eventos
+  const getGridConfig = (numEventos) => {
+    if (numEventos === 1) {
+      return { columns: 1, itemSize: (width - 80) / 2 }; // Item maior para 1 evento
+    } else if (numEventos === 2) {
+      return { columns: 2, itemSize: (width - 80) / 2.5 }; // 2 colunas para 2 eventos
+    } else {
+      return { columns: 3, itemSize: (width - 80) / 3.2 }; // 3 colunas para 3+ eventos
+    }
+  };
+
+  const { columns, itemSize } = getGridConfig(eventosParticipados.length);
+
+  const renderEventoItem = ({ item, index }: { item: EventoParticipado; index: number }) => {
+    // Para 1 evento, centralizar
+    const isSingleEvent = eventosParticipados.length === 1;
+    
+    return (
+      <TouchableOpacity
+        style={[
+          styles.eventoGridItem, 
+          { 
+            width: itemSize, 
+            height: itemSize,
+            marginHorizontal: isSingleEvent ? 'auto' : 4,
+            marginVertical: 4,
+          }
+        ]}
+        onPress={() => navigation.navigate("Ingressos")}
+        activeOpacity={0.8}
+      >
+        {item.imageurl ? (
+          <Image source={{ uri: item.imageurl }} style={styles.eventoGridImage} />
+        ) : (
+          <View style={[styles.eventoGridImage, styles.eventoGridPlaceholder]}>
+            <MaterialCommunityIcons 
+              name="calendar-outline" 
+              size={eventosParticipados.length === 1 ? 32 : 24} 
+              color={Colors.textSecondary} 
+            />
+          </View>
+        )}
+        
+        {/* Badge com quantidade de ingressos */}
+        {item.quantidadeIngressos > 1 && (
+          <View style={styles.eventoGridBadge}>
+            <MaterialCommunityIcons name="ticket-confirmation" size={12} color="#fff" />
+            <Text style={styles.eventoGridBadgeText}>{item.quantidadeIngressos}</Text>
+          </View>
+        )}
+        
+        {/* Overlay com nome do evento */}
+        <View style={styles.eventoGridOverlay}>
+          <Text 
+            style={[
+              styles.eventoGridTitle,
+              { fontSize: eventosParticipados.length === 1 ? 12 : 9 }
+            ]} 
+            numberOfLines={2}
+          >
+            {item.nomeevento}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  if (eventosParticipados.length === 0) {
+    return (
+      <View style={styles.eventosSection}>
+        <View style={styles.eventosSectionHeader}>
+          <MaterialCommunityIcons name="calendar-check" size={20} color={Colors.primary} />
+          <Text style={styles.sectionTitle}>Eventos Participados</Text>
+        </View>
+        <View style={styles.eventosEmptyState}>
+          <MaterialCommunityIcons name="calendar-outline" size={48} color={Colors.textSecondary} />
+          <Text style={styles.eventosEmptyTitle}>Nenhum evento ainda</Text>
+          <Text style={styles.eventosEmptySubtitle}>
+            Seus eventos participados aparecerão aqui
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.eventosSection}>
+      <View style={styles.eventosSectionHeader}>
+        <View style={styles.eventosSectionHeaderLeft}>
+          <MaterialCommunityIcons name="calendar-check" size={20} color={Colors.primary} />
+          <Text style={styles.sectionTitle}>Eventos Participados</Text>
+        </View>
+        <TouchableOpacity onPress={() => navigation.navigate("Ingressos")}>
+          <Text style={styles.verTodosText}>Ver todos</Text>
+        </TouchableOpacity>
+      </View>
+      
+      {/* Estatísticas dos eventos */}
+      <View style={styles.eventosStats}>
+        <Text style={styles.eventosStatsText}>
+          {eventosParticipados.length} {eventosParticipados.length === 1 ? 'evento' : 'eventos'} • {' '}
+          {eventosParticipados.reduce((total, evento) => total + evento.quantidadeIngressos, 0)} {' '}
+          {eventosParticipados.reduce((total, evento) => total + evento.quantidadeIngressos, 0) === 1 ? 'ingresso' : 'ingressos'}
+        </Text>
+      </View>
+      
+      <View style={styles.eventosGridContainer}>
+        {eventosParticipados.length === 1 ? (
+          // Layout especial para 1 evento
+          <View style={styles.singleEventContainer}>
+            {renderEventoItem({ item: eventosParticipados[0], index: 0 })}
+          </View>
+        ) : (
+          // Layout em grid para múltiplos eventos
+          <FlatList
+            data={eventosParticipados}
+            renderItem={renderEventoItem}
+            keyExtractor={(item) => item.eventid}
+            numColumns={columns}
+            scrollEnabled={false}
+            contentContainerStyle={styles.eventosGrid}
+            columnWrapperStyle={eventosParticipados.length > 1 ? styles.eventosGridRow : null}
+          />
+        )}
+      </View>
+    </View>
+  );
+};
+
 // ==================== COMPONENTE PRINCIPAL ====================
 export default function Perfil({ navigation }) {
   const [cpfInput, setCpfInput] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
+  const [eventosParticipados, setEventosParticipados] = useState<EventoParticipado[]>([]);
+  const [loadingEventos, setLoadingEventos] = useState(false);
       
   const fadeAnim = useState(new Animated.Value(0))[0];
   const slideAnim = useState(new Animated.Value(30))[0];
@@ -206,10 +351,12 @@ export default function Perfil({ navigation }) {
         }),
       ]).start();
       fetchProfileImage(user.cpf);
+      carregarEventosParticipados(user.cpf);
     } else {
       fadeAnim.setValue(0);
       slideAnim.setValue(30);
       setProfileImageUrl(null);
+      setEventosParticipados([]);
     }
   }, [user]);
 
@@ -226,6 +373,65 @@ export default function Perfil({ navigation }) {
       }
     } catch (error) {
       console.error("Erro ao buscar imagem de perfil:", error);
+    }
+  };
+
+  const carregarEventosParticipados = async (cpf: string) => {
+    if (!cpf) return;
+    
+    setLoadingEventos(true);
+    try {
+      // Buscar dados do usuário
+      const userSnapshot = await get(ref(database, `users/cpf/${cpf}`));
+      if (!userSnapshot.exists()) {
+        setEventosParticipados([]);
+        return;
+      }
+
+      const userData = userSnapshot.val();
+      const ingressosComprados = userData.ingressoscomprados;
+      
+      if (!ingressosComprados) {
+        setEventosParticipados([]);
+        return;
+      }
+
+      // Agrupar ingressos por evento
+      const grupos: { [key: string]: any[] } = {};
+      for (const codigo in ingressosComprados) {
+        const ingresso = ingressosComprados[codigo];
+        const eventid = ingresso.eventid;
+        if (!grupos[eventid]) grupos[eventid] = [];
+        grupos[eventid].push({ ...ingresso, codigo });
+      }
+
+      // Buscar dados dos eventos
+      const listaEventos: EventoParticipado[] = [];
+      for (const eventid in grupos) {
+        try {
+          const snapEvento = await get(ref(database, `eventos/${eventid}`));
+          const eventoData = snapEvento.exists() ? snapEvento.val() : {};
+          
+          listaEventos.push({
+            eventid,
+            nomeevento: eventoData.nomeevento || "Evento desconhecido",
+            imageurl: eventoData.imageurl || "",
+            dataevento: eventoData.dataevento || "",
+            local: eventoData.local || "",
+            quantidadeIngressos: grupos[eventid].length,
+          });
+        } catch (error) {
+          console.error("Erro ao buscar evento:", error);
+        }
+      }
+
+      // Limitar a 9 eventos para o grid (3x3)
+      setEventosParticipados(listaEventos.slice(0, 9));
+    } catch (error) {
+      console.error("Erro ao carregar eventos participados:", error);
+      setEventosParticipados([]);
+    } finally {
+      setLoadingEventos(false);
     }
   };
 
@@ -299,7 +505,13 @@ export default function Perfil({ navigation }) {
   }
 
   return (
-    <SafeAreaView style={[styles.safeArea, { paddingTop: insets.top }]}>
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="light-content" backgroundColor="#000000" />
+      {/* Novo Cabeçalho */}
+      <View style={[styles.customHeader, { paddingTop: insets.top + (Platform.OS === 'android' ? 10 : 0) }]}>
+        <Image source={LogoImage} style={styles.headerLogo} resizeMode="contain" />
+      </View>
+
       <ScrollView 
         contentContainerStyle={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
@@ -307,7 +519,7 @@ export default function Perfil({ navigation }) {
         {user ? (
           <Animated.View style={[styles.profileContainer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
                          
-            {/* Header do Perfil */}
+            {/* Header do Perfil (antigo, agora abaixo do novo cabeçalho) */}
             <View style={styles.profileHeader}>
               <View style={styles.profileImageContainer}>
                 {profileImageUrl ? (
@@ -341,6 +553,19 @@ export default function Perfil({ navigation }) {
                 </View>
               </View>
             </View>
+
+            {/* Seção de Eventos Participados */}
+            {loadingEventos ? (
+              <View style={styles.eventosLoadingContainer}>
+                <ActivityIndicator size="small" color={Colors.primary} />
+                <Text style={styles.eventosLoadingText}>Carregando eventos...</Text>
+              </View>
+            ) : (
+              <EventosParticipados 
+                eventosParticipados={eventosParticipados} 
+                navigation={navigation}
+              />
+            )}
 
             {/* Opções do Perfil */}
             <View style={styles.optionsSection}>
@@ -586,6 +811,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 16,
     elevation: 4,
+    marginTop: 16, // Adicionado para dar espaço do novo cabeçalho
   },
   profileImageContainer: {
     marginBottom: 16,
@@ -666,6 +892,150 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
+  // ==================== ESTILOS EVENTOS PARTICIPADOS ====================
+  eventosSection: {
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  eventosSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  eventosSectionHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  verTodosText: {
+    fontSize: 14,
+    color: Colors.primary,
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  eventosStats: {
+    marginBottom: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: Colors.background,
+    borderRadius: 8,
+  },
+  eventosStatsText: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    fontWeight: '500',
+    textAlign: 'center',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  eventosGridContainer: {
+    // Container para o grid de eventos
+  },
+  singleEventContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eventosGrid: {
+    alignItems: 'center',
+  },
+  eventosGridRow: {
+    justifyContent: 'space-around',
+    marginBottom: 8,
+  },
+  eventoGridItem: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  eventoGridImage: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: Colors.background,
+  },
+  eventoGridPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.border,
+  },
+  eventoGridBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    borderRadius: 12,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  eventoGridBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  eventoGridOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    padding: 8,
+  },
+  eventoGridTitle: {
+    color: '#fff',
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+    lineHeight: 12,
+  },
+  eventosEmptyState: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  eventosEmptyTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+    marginTop: 12,
+    marginBottom: 4,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  eventosEmptySubtitle: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
+  eventosLoadingContainer: {
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 16,
+    padding: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  eventosLoadingText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
+  },
   // Opções do perfil
   optionsSection: {
     backgroundColor: Colors.cardBackground,
@@ -718,4 +1088,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'Roboto',
   },
+  // Novo estilo para o cabeçalho personalizado
+  customHeader: {
+    backgroundColor: '#000000',
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingBottom: 10,
+    // paddingTop será ajustado dinamicamente com insets.top
+  },
+  headerLogo: {
+    width: 70, // Ajuste conforme necessário
+    height: 35, // Ajuste conforme necessário
+  },
 });
+
+
