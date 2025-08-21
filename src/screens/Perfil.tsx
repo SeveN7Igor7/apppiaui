@@ -462,6 +462,7 @@ export default function Perfil({ navigation }) {
             cpf: data.cpf,
             fullname: data.fullname,
             email: data.email,
+            photoURL: data.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.fullname || data.email)}&background=random&color=fff&size=128`, // Usando UI Avatars como placeholder para foto de perfil
             telefone: data.telefone,
             datanascimento: data.datanascimento,
           });

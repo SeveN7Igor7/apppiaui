@@ -6,6 +6,7 @@ type User = {
   cpf: string;
   fullname: string;
   email: string;
+  photoURL?: string; // Adicionado photoURL
   telefone?: string;
   datanascimento?: string;
 };
@@ -42,7 +43,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const login = async (userData: User) => {
     setUser(userData);
-    await AsyncStorage.setItem('@piauitickets_user', JSON.stringify(userData));
+    await AsyncStorage.setItem("@piauitickets_user", JSON.stringify(userData));
   };
 
   const logout = async () => {

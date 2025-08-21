@@ -408,4 +408,64 @@ export const eventDetailsStyles = StyleSheet.create({
     fontWeight: Typography.fontWeight.bold,
     marginLeft: Spacing.sm,
   },
+
+  // Chat Button
+  chatButton: {
+    position: 'absolute',
+    bottom: Spacing.lg,
+    right: Spacing.lg,
+    backgroundColor: Colors.primary.purple,
+    borderRadius: 28,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    elevation: 5,
+    shadowColor: Colors.shadow.dark,
+    shadowOffset: Spacing.shadowOffset.medium,
+    shadowOpacity: 0.3,
+    shadowRadius: Spacing.shadowRadius.medium,
+  },
+  chatButtonText: {
+    ...Typography.styles.button,
+    color: Colors.text.onPrimary,
+    fontWeight: Typography.fontWeight.semiBold,
+  },
+
+  // Chat Modal
+  chatModalContainer: {
+    flex: 1,
+    backgroundColor: Colors.neutral.white, // Fundo branco
+    borderTopLeftRadius: Spacing.card.borderRadius,
+    borderTopRightRadius: Spacing.card.borderRadius,
+    overflow: 'hidden',
+    paddingTop: Platform.OS === 'android' ? 25 : 0, // Ajuste para status bar
+  },
+  chatHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between', // Alinhar itens na horizontal
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    backgroundColor: Colors.primary.purple, // Cor de destaque para o cabeçalho
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.primary.purple, // Cor da borda
+  },
+  chatCloseButton: {
+    padding: Spacing.xs,
+  },
+  chatHeaderTitle: {
+    ...Typography.styles.h3,
+    color: Colors.text.onPrimary,
+    fontWeight: Typography.fontWeight.bold,
+    flex: 1, // Para o título ocupar o espaço restante
+    textAlign: 'center', // Centralizar o título
+  },
+  chatContent: {
+    flex: 1,
+    backgroundColor: Colors.neutral.white, // Fundo branco para o conteúdo do chat
+  },
+
+
 });
